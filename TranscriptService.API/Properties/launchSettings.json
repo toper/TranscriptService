@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "TranscriptService": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
