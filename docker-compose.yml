@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  transcriptservice:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: transcriptservice
+    env_file:
+      - .env
+    volumes:
+      # Montuj katalog z plikami audio (zmień ścieżkę na swoją lokalną)
+      - ./audio:/audio
+      # Montuj katalog z modelami Vosk (zmień ścieżkę na swoją lokalną)
+      - ./models:/models
+      # Katalog wyjściowy dla wyników transkrypcji
+      - ./output:/app/output
+    environment:
+      - AUDIO_FOLDER_PATH=${AUDIO_FOLDER_PATH:-/audio}
+      - VOSK_MODEL_PATH=${VOSK_MODEL_PATH:-/models/vosk-model-pl}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - TRANSCRIPTION_ENGINE=${TRANSCRIPTION_ENGINE:-whisper}
+    # Kontener zakończy się po przetworzeniu wszystkich plików
+    restart: "no"
+    networks:
+      - transcriptservice-network
+
+networks:
+  transcriptservice-network:
+    driver: bridge

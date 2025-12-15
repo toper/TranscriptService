@@ -361,3 +361,15 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Environment variables
+.env
+
+# Docker volumes and output
+audio/
+models/
+output/
+transcriptions.json
+
+# macOS
+.DS_Store
