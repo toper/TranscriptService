@@ -376,3 +376,4 @@ transcriptions.json
 .DS_Store
 /.claude
 /nul
+/TranscriptService.VoskAPI/VoskModel/vosk-model-small-pl-0.22.zip

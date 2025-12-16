@@ -27,16 +27,16 @@ namespace TranscriptService.Tests.Provider
             _provider = new TranscriptProvider(_mockLogger.Object, _mockConfiguration.Object);
 
             // Create a test WAV file
-            _testFilePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.wav");
-            File.WriteAllText(_testFilePath, "test audio content");
+            _testFilePath = TestHelper.GetTestFilePath("Audio/sample.wav");
+//            File.WriteAllText(_testFilePath, "test audio content");
         }
 
         [Fact]
         public async Task TranscribeFromStreamAsync_WhenStreamIsValid_ShouldCreateTempFileAndCleanup()
         {
             // Arrange
-            var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("test audio"));
-            var fileName = "test.wav";
+            var stream = new MemoryStream(File.ReadAllBytes(TestHelper.GetTestFilePath("Audio/sample.wav")));
+            var fileName = "sample.wav";
             var engine = "whisper"; // Note: This will fail in real scenario without valid API key
 
             // Act
@@ -53,8 +53,8 @@ namespace TranscriptService.Tests.Provider
         public async Task TranscribeFromStreamAsync_WhenEngineIsUnknown_ShouldReturnError()
         {
             // Arrange
-            var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes("test audio"));
-            var fileName = "test.wav";
+            var stream = new MemoryStream(File.ReadAllBytes(TestHelper.GetTestFilePath("Audio/sample.wav")));
+            var fileName = "sample.wav";
             var engine = "unknown-engine";
 
             // Act
@@ -132,15 +132,6 @@ namespace TranscriptService.Tests.Provider
             Assert.True(true); // Placeholder
         }
 
-        [Fact]
-        public void Cleanup_TestFile()
-        {
-            // Cleanup test file
-            if (File.Exists(_testFilePath))
-            {
-                File.Delete(_testFilePath);
-            }
-            Assert.True(true);
-        }
+
     }
 }
