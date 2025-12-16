@@ -374,3 +374,5 @@ transcriptions.json
 
 # macOS
 .DS_Store
+/.claude
+/nul

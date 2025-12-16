@@ -1,59 +1,80 @@
-﻿using Newtonsoft.Json;
-using TranscriptService.Models;
-using TranscriptService.VoskAPI;
-using TranscriptService.Whisper;
+using NLog;
+using NLog.Web;
+using TranscriptService.API.Configuration;
+using Asp.Versioning;
 
-namespace TranscriptService
+var logger = LogManager.Setup().LoadConfigurationFromAppSettings().GetCurrentClassLogger();
+logger.Debug("Init main");
+
+try
 {
-    class Program
+    var webApplicationOptions = new WebApplicationOptions()
     {
-        static async Task Main(string[] args)
+        ContentRootPath = AppContext.BaseDirectory,
+        Args = args
+    };
+
+    var builder = WebApplication.CreateBuilder(webApplicationOptions);
+
+    // Configuration
+    builder.ConfigureHosting(logger);
+    builder.AddNlog();
+
+    // API Versioning
+    builder.Services.AddApiVersioning(options =>
+    {
+        options.DefaultApiVersion = new ApiVersion(1, 0);
+        options.AssumeDefaultVersionWhenUnspecified = true;
+        options.ReportApiVersions = true;
+    }).AddApiExplorer(options =>
+    {
+        options.GroupNameFormat = "'v'VVV";
+        options.SubstituteApiVersionInUrl = true;
+    });
+
+    // Services
+    builder.AddServices();
+
+    // CORS
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
         {
-            if (args.Length < 4)
-            {
-                Console.WriteLine("Usage: MainApp <audioFolderPath> <voskModelPath> <openAiApiKey> <engine>");
-                Console.WriteLine("engine = whisper or vosk");
-                return;
-            }
+            policy.AllowAnyOrigin()
+                  .AllowAnyMethod()
+                  .AllowAnyHeader();
+        });
+    });
 
-            string audioFolder = args[0];
-            string voskModelPath = args[1];
-            string openAiApiKey = args[2];
-            string engine = args[3].ToLower();
+    var app = builder.Build();
 
-            ITranscriber transcriber;
-
-            if (engine == "whisper")
-            {
-                transcriber = new WhisperTranscriber(openAiApiKey);
-            }
-            else if (engine == "vosk")
-            {
-                transcriber = new VoskTranscriber(voskModelPath);
-            }
-            else
-            {
-                Console.WriteLine("Engine must be 'whisper' or 'vosk'");
-                return;
-            }
-
-            var results = new List<(string FileName, TranscriptionResult Transcription)>();
-
-            foreach (var file in Directory.GetFiles(audioFolder, "*.wav"))
-            {
-                Console.WriteLine($"Transcribing {file}");
-
-                var transcription = await transcriber.TranscribeAsync(file);
-
-                results.Add((Path.GetFileName(file), transcription));
-
-                Console.WriteLine($"Done: {file}");
-            }
-
-            string jsonOut = JsonConvert.SerializeObject(results, Formatting.Indented);
-            await File.WriteAllTextAsync("transcriptions.json", jsonOut);
-
-            Console.WriteLine("Transcriptions saved to transcriptions.json");
-        }
+    // Exception handling
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseExceptionHandler("/error-development");
     }
+    else
+    {
+        app.UseExceptionHandler("/error");
+        app.UseHsts();
+    }
+
+    // Middleware pipeline
+    app.UseCors();
+    app.UseHttpsRedirection();
+    app.UseRouting();
+    app.UseApiKeyMiddleware();
+    app.UseCustomHealthChecks();
+    app.MapControllers();
+
+    app.Run();
+}
+catch (Exception exception)
+{
+    logger.Error(exception, "Stopped program because of exception");
+    throw;
+}
+finally
+{
+    LogManager.Shutdown();
 }

@@ -150,4 +150,4 @@ Projekt dostępny na licencji zawartej w pliku `LICENSE.txt`.
 
 ## Autor
 
-Projekt stworzony do przetwarzania nagrań audio na tekst z wykorzystaniem nowoczesnych technologii rozpoznawania mowy.
+Toper System Jarosław Karlik - na potrzeby własne.
