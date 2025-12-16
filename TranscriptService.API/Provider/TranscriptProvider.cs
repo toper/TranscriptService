@@ -92,7 +92,7 @@ namespace TranscriptService.API.Provider
         {
             return engine.ToLower() switch
             {
-                "whisper" => new WhisperTranscriber(_configuration["AppSettings:OpenAiApiKey"]),
+                "whisper" => new WhisperTranscriber(_configuration["AppSettings:WhisperModelPath"]),
                 "vosk" => new VoskTranscriber(_configuration["AppSettings:VoskModelPath"]),
                 _ => throw new ArgumentException($"Unknown engine: {engine}")
             };
