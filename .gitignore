@@ -377,3 +377,6 @@ transcriptions.json
 /.claude
 /nul
 /TranscriptService.VoskAPI/VoskModel/vosk-model-small-pl-0.22.zip
+/TranscriptService.Whisper/WhisperModel/ggml-base.bin
+/TranscriptService.Whisper/WhisperModel/ggml-large-v3-turbo.bin
+/TranscriptService.Whisper/WhisperModel/ggml-large-v3.bin

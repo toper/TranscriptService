@@ -1,25 +1,39 @@
 using FluentAssertions;
+using System.Data.SqlTypes;
+using System.Diagnostics;
 using TranscriptService.Models;
 using TranscriptService.VoskAPI;
 using TranscriptService.Whisper;
+using Whisper.net.Wave;
 
 namespace TranscriptService.Tests.Integration;
 
 /// <summary>
 /// Testy integracyjne transkrypcji z użyciem rzeczywistych plików audio
 ///
-/// UWAGA: Te testy są oznaczone jako Skip, ponieważ wymagają:
-/// - Rzeczywistego pliku audio w TestData/Audio/sample.wav
-/// - Modelu Vosk (dla testów VoskTranscriber)
-/// - Klucza API OpenAI (dla testów WhisperTranscriber)
+/// WYMAGANIA:
+/// 1. Plik audio sample.wav w TestData/Audio/ (musi być 16kHz, mono, WAV)
+///    - Konwersja: ffmpeg -i input.wav -ar 16000 -ac 1 TestData/Audio/sample.wav
 ///
-/// Aby uruchomić te testy:
-/// 1. Umieść plik audio w TranscriptService.Tests/TestData/Audio/sample.wav
-/// 2. Usuń atrybut [Fact(Skip = "...")] i zastąp go [Fact]
-/// 3. Skonfiguruj wymagane zmienne środowiskowe lub parametry
+/// 2. Model Whisper GGML (dla testów WhisperTranscriber):
+///    - Pobierz z: https://huggingface.co/ggerganov/whisper.cpp/tree/main
+///    - Zalecane: ggml-base.bin (~142 MB)
+///    - Ustaw zmienną środowiskową WHISPER_MODEL_PATH lub umieść w D:\Models\ggml-base.bin
+///
+/// 3. Model Vosk (dla testów VoskTranscriber):
+///    - Ustaw zmienną środowiskową VOSK_MODEL_PATH lub umieść w domyślnej lokalizacji
+///
+/// UWAGA: Test WhisperTranscriber_ShouldTranscribeSampleAudio będzie automatycznie pominięty
+/// z jasnym komunikatem, jeśli model lub plik audio nie spełnia wymagań.
 /// </summary>
 public class TranscriptionIntegrationTests
 {
+    public TranscriptionIntegrationTests()
+    {
+        Environment.SetEnvironmentVariable("WHISPER_MODEL_PATH", "d:\\GIT\\TranscriptService\\TranscriptService.Whisper\\WhisperModel\\ggml-large-v3-turbo.bin", EnvironmentVariableTarget.Process);
+        Environment.SetEnvironmentVariable("VOSK_MODEL_PATH", "d:\\GIT\\TranscriptService\\TranscriptService.VoskAPI\\VoskModel\\vosk-model-small-pl-0.22", EnvironmentVariableTarget.Process);
+    }
+
     [Fact]
     public void TestHelper_ShouldLocateTestAudioFile()
     {
@@ -52,44 +66,61 @@ public class TranscriptionIntegrationTests
         // result.FullText.Should().Contain("oczekiwane słowo");
     }
 
-    [Fact(Skip = "Requires sample audio file and OpenAI API key")]
+    [Fact]
     public async Task WhisperTranscriber_ShouldTranscribeSampleAudio()
     {
         // Arrange
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            ?? throw new InvalidOperationException("Brak zmiennej środowiskowej OPENAI_API_KEY");
+        var modelPath = Environment.GetEnvironmentVariable("WHISPER_MODEL_PATH")
+            ?? @"D:\Models\ggml-base.bin";
 
-        var transcriber = new WhisperTranscriber(apiKey);
+        // Skip test if model doesn't exist
+        if (!File.Exists(modelPath))
+        {
+            Assert.Fail($"SKIP: Model Whisper nie został znaleziony w: {modelPath}. " +
+                       "Pobierz model z https://huggingface.co/ggerganov/whisper.cpp/tree/main " +
+                       "lub ustaw zmienną środowiskową WHISPER_MODEL_PATH");
+        }
+
+        var transcriber = new WhisperTranscriber(modelPath);
         var audioFilePath = TestHelper.GetTestFilePath("Audio/sample.wav");
 
-        // Act
-        var result = await transcriber.TranscribeAsync(audioFilePath);
+        Stopwatch sw = Stopwatch.StartNew();
 
+        TranscriptionResult result;
+
+        // Act
+        result = await transcriber.TranscribeAsync(audioFilePath);
+        sw.Stop();
+        Console.WriteLine("Transkrypcja ("+sw.ElapsedMilliseconds+") :"+result.FullText);
         // Assert
         result.Should().NotBeNull();
         result.FullText.Should().NotBeNullOrWhiteSpace();
+        //result.FullText.Should().Contain("Kościuszki");
         result.Transcription.Should().NotBeEmpty();
 
-        // Whisper zwraca timestampy
-        result.Transcription.Should().AllSatisfy(word =>
+        // Whisper zwraca timestampy dla segmentów
+        result.Transcription.Should().AllSatisfy(segment =>
         {
-            word.Word.Should().NotBeNullOrWhiteSpace();
-            word.StartTime.Should().BeGreaterOrEqualTo(0);
-            word.EndTime.Should().BeGreaterThan(word.StartTime);
+            segment.Word.Should().NotBeNullOrWhiteSpace();
+            segment.StartTime.Should().BeGreaterOrEqualTo(0);
+            segment.EndTime.Should().BeGreaterThan(segment.StartTime);
         });
+
+        // Clean up
+        transcriber.Dispose();
     }
 
-    [Fact(Skip = "Requires sample audio file and both Vosk model and OpenAI API key")]
+    [Fact(Skip = "Requires sample audio file and both Vosk and Whisper models")]
     public async Task BothTranscribers_ShouldProduceSimilarResults()
     {
         // Arrange
-        var modelPath = Environment.GetEnvironmentVariable("VOSK_MODEL_PATH")
+        var voskModelPath = Environment.GetEnvironmentVariable("VOSK_MODEL_PATH")
             ?? @"C:\vosk-models\vosk-model-small-pl-0.22";
-        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")
-            ?? throw new InvalidOperationException("Brak zmiennej środowiskowej OPENAI_API_KEY");
+        var whisperModelPath = Environment.GetEnvironmentVariable("WHISPER_MODEL_PATH")
+            ?? @"D:\Models\ggml-base.bin";
 
-        var voskTranscriber = new VoskTranscriber(modelPath);
-        var whisperTranscriber = new WhisperTranscriber(apiKey);
+        var voskTranscriber = new VoskTranscriber(voskModelPath);
+        var whisperTranscriber = new WhisperTranscriber(whisperModelPath);
         var audioFilePath = TestHelper.GetTestFilePath("Audio/sample.wav");
 
         // Act
@@ -104,15 +135,19 @@ public class TranscriptionIntegrationTests
         voskResult.FullText.Should().NotBeNullOrWhiteSpace();
         whisperResult.FullText.Should().NotBeNullOrWhiteSpace();
 
-        // Porównanie liczby słów (z tolerancją)
+        // Porównanie liczby elementów transkrypcji (z tolerancją)
+        // Uwaga: Vosk zwraca słowa, Whisper zwraca segmenty
         var voskWordCount = voskResult.Transcription.Count;
-        var whisperWordCount = whisperResult.Transcription.Count;
+        var whisperSegmentCount = whisperResult.Transcription.Count;
 
-        var difference = Math.Abs(voskWordCount - whisperWordCount);
-        var averageCount = (voskWordCount + whisperWordCount) / 2.0;
+        var difference = Math.Abs(voskWordCount - whisperSegmentCount);
+        var averageCount = (voskWordCount + whisperSegmentCount) / 2.0;
         var percentageDifference = (difference / averageCount) * 100;
 
-        percentageDifference.Should().BeLessThan(30,
-            "różnica w liczbie słów między Vosk a Whisper nie powinna przekraczać 30%");
+        percentageDifference.Should().BeLessThan(50,
+            "różnica w liczbie elementów między Vosk (słowa) a Whisper (segmenty) nie powinna być zbyt duża");
+
+        // Clean up
+        whisperTranscriber.Dispose();
     }
 }
