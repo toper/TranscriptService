@@ -14,9 +14,10 @@ namespace TranscriptService.API.Middleware
 
         public async Task InvokeAsync(HttpContext context)
         {
-            // Skip API key validation for /ping and /health
+            // Skip API key validation for /ping, /health, and /swagger
             if (context.Request.Path.StartsWithSegments("/ping") ||
-                context.Request.Path.StartsWithSegments("/health"))
+                context.Request.Path.StartsWithSegments("/health") ||
+                context.Request.Path.StartsWithSegments("/swagger"))
             {
                 await _next(context);
                 return;

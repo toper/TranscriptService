@@ -35,6 +35,9 @@ try
     // Services
     builder.AddServices();
 
+    // Swagger
+    builder.Services.AddSwaggerConfiguration();
+
     // CORS
     builder.Services.AddCors(options =>
     {
@@ -63,6 +66,10 @@ try
     app.UseCors();
     app.UseHttpsRedirection();
     app.UseRouting();
+
+    // Swagger UI (no authentication required)
+    app.UseSwaggerConfiguration();
+
     app.UseApiKeyMiddleware();
     app.UseCustomHealthChecks();
     app.MapControllers();
