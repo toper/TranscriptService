@@ -66,30 +66,32 @@ namespace TranscriptService.Whisper
             WhisperProcessor? processor = null;
             Exception? lastException = null;
 
-            // Strategy 1: Try loading model without CUDA runtime interference
-            // For large models, we need to be very careful with memory
-            if (processor == null && isLargeModel)
+            // Strategy 1: Try loading model with GPU acceleration
+            if (processor == null)
             {
                 try
                 {
-                    Console.WriteLine("[WhisperTranscriber] Strategy 1: Loading large model with minimal config...");
+                    Console.WriteLine("[WhisperTranscriber] Strategy 1: Attempting to load model with GPU acceleration...");
 
-                    // For large models, use absolute minimum configuration
-                    // This avoids CUDA initialization which often causes AccessViolation
                     var factory = WhisperFactory.FromPath(_modelPath);
 
                     Console.WriteLine("[WhisperTranscriber] Factory created successfully");
 
-                    processor = factory.CreateBuilder()
-                        .WithLanguage("pl")
-                        .WithThreads(1)  // Single thread for large models to minimize memory issues
-                        .Build();
+                    // Try to use GPU with optimal settings
+                    var builder = factory.CreateBuilder()
+                        .WithLanguage("pl");
 
-                    Console.WriteLine("[WhisperTranscriber] Processor built successfully with 1 thread");
+                    // For large models on GPU, we can use more threads
+                    var threadCount = isLargeModel ? Math.Min(4, Environment.ProcessorCount) : Environment.ProcessorCount;
+                    builder.WithThreads(threadCount);
+
+                    processor = builder.Build();
+
+                    Console.WriteLine($"[WhisperTranscriber] Processor built successfully with {threadCount} threads (GPU-accelerated)");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[WhisperTranscriber] Strategy 1 failed: {ex.GetType().Name} - {ex.Message}");
+                    Console.WriteLine($"[WhisperTranscriber] Strategy 1 (GPU) failed: {ex.GetType().Name} - {ex.Message}");
                     lastException = ex;
                     processor = null;
                 }

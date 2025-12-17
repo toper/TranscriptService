@@ -9,8 +9,8 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="Whisper.net" Version="1.9.0" />
-    <!-- CUDA runtime temporarily disabled due to AccessViolationException with large models -->
-    <!-- <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.8.1" /> -->
+    <!-- Re-enabled CUDA for GPU acceleration -->
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Windows" Version="1.8.1" />
   </ItemGroup>
 
   <ItemGroup>
