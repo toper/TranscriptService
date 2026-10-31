@@ -6,7 +6,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Restore in its own layer: it only re-runs when project files or package versions change.
-COPY global.json nuget.config Directory.Build.props Directory.Packages.props ./
+COPY global.json nuget.config .editorconfig Directory.Build.props Directory.Packages.props ./
 COPY src/TranscriptService.Contracts/TranscriptService.Contracts.csproj src/TranscriptService.Contracts/
 COPY src/TranscriptService.Audio/TranscriptService.Audio.csproj src/TranscriptService.Audio/
 COPY src/TranscriptService.ServiceDefaults/TranscriptService.ServiceDefaults.csproj src/TranscriptService.ServiceDefaults/
