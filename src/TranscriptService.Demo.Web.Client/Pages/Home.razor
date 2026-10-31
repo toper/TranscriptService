@@ -117,7 +117,7 @@
         }
         catch (IOException ex)
         {
-            _error = ex.Message;
+            _error = ex.Message; // e.g. the file exceeds the demo's upload limit
         }
     }
 
@@ -139,8 +139,9 @@
                 utterance.Finish(result);
             }
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException)
         {
+            // Rejected recording, backend unreachable or hub disconnected: the row says why instead of waiting forever.
             utterance.Fail(ex.Message);
         }
 
@@ -160,12 +161,15 @@
         StateHasChanged();
     });
 
+    // The microphone and session belong to the DI scope, which disposes them; the page only lets go.
     public async ValueTask DisposeAsync()
     {
         Session.Finished -= OnFinishedAsync;
         Microphone.UtteranceRecorded -= OnUtteranceAsync;
-        await Microphone.DisposeAsync();
-        await Session.DisposeAsync();
+        if (_listening)
+        {
+            await Microphone.StopAsync();
+        }
     }
 
     private enum UtteranceState

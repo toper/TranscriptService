@@ -26,15 +26,24 @@ export async function start(dotnet) {
     audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
   });
   const context = new AudioContext();
-  const moduleUrl = URL.createObjectURL(new Blob([workletSource], { type: 'text/javascript' }));
-  await context.audioWorklet.addModule(moduleUrl);
-  URL.revokeObjectURL(moduleUrl);
+  try {
+    const moduleUrl = URL.createObjectURL(new Blob([workletSource], { type: 'text/javascript' }));
+    await context.audioWorklet.addModule(moduleUrl);
+    URL.revokeObjectURL(moduleUrl);
 
-  const node = new AudioWorkletNode(context, 'capture');
-  session = { dotnet, stream, context, node, rate: context.sampleRate, frames: [], speechMs: 0, silenceMs: 0 };
-  const current = session;
-  node.port.onmessage = (event) => onFrame(current, event.data);
-  context.createMediaStreamSource(stream).connect(node);
+    const node = new AudioWorkletNode(context, 'capture');
+    const current = { dotnet, stream, context, node, rate: context.sampleRate, frames: [], speechMs: 0, silenceMs: 0 };
+    node.port.onmessage = (event) => onFrame(current, event.data);
+    context.createMediaStreamSource(stream).connect(node);
+    // Created after the permission prompt, the context may start suspended (Safari, expired user activation).
+    await context.resume();
+    session = current;
+  } catch (error) {
+    // Release the microphone, or the browser's recording indicator stays on.
+    stream.getTracks().forEach((track) => track.stop());
+    await context.close();
+    throw error;
+  }
 }
 
 export async function stop() {

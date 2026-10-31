@@ -68,6 +68,19 @@ public sealed class CallbackDispatcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispatch_PrivateHostOnTheAllowList_IsDelivered()
+    {
+        RespondWith(200);
+        _factory.Settings["Api:AllowPrivateCallbackAddresses"] = "false";
+        _factory.Settings["Api:AllowedCallbackHosts:0"] = "localhost";
+        var job = await AddFinishedJobAsync(_factory);
+
+        await WaitUntilAsync(_factory, async db => !await db.Jobs.AnyAsync(j => j.Id == job.Id));
+
+        await WaitUntilLoggedAsync(1);
+    }
+
+    [Fact]
     public async Task Dispatch_TransientFailureThenSuccess_Delivers()
     {
         _client.Given(Request.Create().WithPath("/hook").UsingPost()).InScenario("flaky").WillSetStateTo("recovered")

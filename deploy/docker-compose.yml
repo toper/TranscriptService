@@ -53,6 +53,7 @@ services:
       Api__ApiKey: ${API_KEY:?Set API_KEY in deploy/.env}
       Api__CallbackSigningSecret: ${CALLBACK_SIGNING_SECRET:?Set CALLBACK_SIGNING_SECRET in deploy/.env}
       Api__AllowPrivateCallbackAddresses: ${ALLOW_PRIVATE_CALLBACKS:-false}
+      Api__AllowedCallbackHosts__0: demo-web   # the demo is called back inside this network
     volumes:
       - data:/data
     depends_on:
@@ -61,7 +62,7 @@ services:
     restart: unless-stopped
 
   # ---- Demo page: microphone → API → callback → SignalR (http://localhost:8081) --------------
-  # The API calls the demo back inside the compose network, so ALLOW_PRIVATE_CALLBACKS must be true.
+  # The API calls the demo back inside the compose network; its host name is on the API's allow-list.
   demo-web:
     profiles: [demo]
     image: transcriptservice-demo

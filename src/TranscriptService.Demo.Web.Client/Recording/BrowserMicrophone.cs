@@ -31,12 +31,13 @@ public sealed class BrowserMicrophone(IJSRuntime js) : IMicrophone
 
     public async ValueTask DisposeAsync()
     {
-        if (_recorder is not null)
+        var recorder = Interlocked.Exchange(ref _recorder, null);
+        if (recorder is not null)
         {
             try
             {
-                await StopAsync().ConfigureAwait(false);
-                await _recorder.DisposeAsync().ConfigureAwait(false);
+                await recorder.InvokeVoidAsync("stop").ConfigureAwait(false);
+                await recorder.DisposeAsync().ConfigureAwait(false);
             }
             catch (JSDisconnectedException)
             {
@@ -45,5 +46,6 @@ public sealed class BrowserMicrophone(IJSRuntime js) : IMicrophone
         }
 
         _callbacks?.Dispose();
+        _callbacks = null;
     }
 }

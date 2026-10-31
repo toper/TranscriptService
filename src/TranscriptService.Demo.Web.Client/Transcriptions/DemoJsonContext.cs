@@ -10,4 +10,8 @@ namespace TranscriptService.Demo.Web.Client.Transcriptions;
 /// </summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(TranscriptionResponse))]
+[JsonSerializable(typeof(Problem))]
 internal sealed partial class DemoJsonContext : JsonSerializerContext;
+
+/// <summary>The parts of an RFC 9457 problem response the page shows.</summary>
+internal sealed record Problem(string? Title, string? Detail);

@@ -63,6 +63,18 @@ public sealed class HomePageTests : IDisposable
     }
 
     [Fact]
+    public async Task SubmissionThatFails_ShowsTheErrorInsteadOfStayingPending()
+    {
+        _session.SubmitFailure = new InvalidOperationException("Not connected to the transcription hub.");
+        var page = _context.Render<Home>();
+        page.Find("button#record").Click();
+
+        await page.InvokeAsync(() => _microphone.SpeakAsync());
+
+        page.WaitForAssertion(() => page.Markup.Should().Contain("Not connected to the transcription hub.").And.NotContain("Transcribing"));
+    }
+
+    [Fact]
     public void RecordButton_TogglesTheMicrophone()
     {
         var page = _context.Render<Home>();
@@ -112,10 +124,17 @@ public sealed class HomePageTests : IDisposable
 
         public Func<Guid, TranscriptionResponse>? FinishBeforeReturning { get; set; }
 
+        public Exception? SubmitFailure { get; set; }
+
         public Task ConnectAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public async Task<Guid> SubmitAsync(Stream wav, string fileName, CancellationToken cancellationToken)
         {
+            if (SubmitFailure is not null)
+            {
+                throw SubmitFailure;
+            }
+
             var id = Guid.NewGuid();
             Submitted.Add(id);
             if (FinishBeforeReturning is not null)

@@ -44,4 +44,10 @@ public sealed class ApiOptions
     /// SSRF; enable only when the receivers live on the internal network (e.g. the demo).
     /// </summary>
     public bool AllowPrivateCallbackAddresses { get; set; }
+
+    /// <summary>
+    /// Host names allowed as callback targets even on private addresses, e.g. <c>demo-web</c> in the
+    /// compose network. Narrower than <see cref="AllowPrivateCallbackAddresses"/>: everything else stays blocked.
+    /// </summary>
+    public IReadOnlyList<string> AllowedCallbackHosts { get; set; } = [];
 }

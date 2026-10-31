@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
 using TranscriptService.Contracts.Callbacks;
 using TranscriptService.Contracts.Http;
@@ -31,16 +32,14 @@ internal static class DemoEndpoints
 
     private static async Task<Results<Accepted<TranscriptionResponse>, ProblemHttpResult>> SubmitAsync(
         IFormFile audio,
-        [FromForm] string connectionId,
+        [FromForm(Name = DemoRoutes.SessionField)] Guid session,
         TranscriptApiClient api,
-        TranscriptionRelay relay,
         CancellationToken cancellationToken)
     {
         try
         {
             using var recording = audio.OpenReadStream();
-            var job = await api.SubmitAsync(recording, audio.FileName, cancellationToken).ConfigureAwait(false);
-            await relay.RegisterAsync(job.Id, connectionId).ConfigureAwait(false);
+            var job = await api.SubmitAsync(recording, audio.FileName, session, cancellationToken).ConfigureAwait(false);
             return TypedResults.Accepted((string?)null, job);
         }
         catch (TranscriptApiException ex)
@@ -50,13 +49,15 @@ internal static class DemoEndpoints
     }
 
     /// <summary>
-    /// Verifies the API's HMAC signature over the raw body, then relays the result to the waiting
-    /// browser. Every verified callback is acknowledged, so the API never retries a delivered result.
+    /// Verifies the API's HMAC signature over the raw body, then pushes the result to the browser
+    /// session named in the callback URL. Every verified callback is acknowledged, so the API never
+    /// retries a delivered result.
     /// </summary>
     private static async Task<Results<Ok, ProblemHttpResult>> ReceiveCallbackAsync(
         HttpRequest request,
+        [FromQuery(Name = DemoRoutes.SessionField)] Guid? session,
         IOptions<TranscriptApiOptions> options,
-        TranscriptionRelay relay,
+        IHubContext<TranscriptionHub, ITranscriptionClient> hub,
         CancellationToken cancellationToken)
     {
         using var buffer = new MemoryStream();
@@ -68,7 +69,11 @@ internal static class DemoEndpoints
             return TypedResults.Problem("The X-Signature header does not match the body.", statusCode: StatusCodes.Status401Unauthorized, title: "Invalid callback signature");
         }
 
-        await relay.DeliverAsync(JsonSerializer.Deserialize<TranscriptionResponse>(body, Json)!).ConfigureAwait(false);
+        if (session is { } target)
+        {
+            var transcription = JsonSerializer.Deserialize<TranscriptionResponse>(body, Json)!;
+            await hub.Clients.Group(target.ToString()).TranscriptionFinished(transcription).ConfigureAwait(false);
+        }
 
         return TypedResults.Ok();
     }

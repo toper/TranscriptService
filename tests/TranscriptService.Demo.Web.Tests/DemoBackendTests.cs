@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using TranscriptService.Api.Tests.Support;
 using TranscriptService.Contracts.Callbacks;
 using TranscriptService.Contracts.Http;
 using TranscriptService.Demo.Web.Client.Transcriptions;
@@ -45,21 +44,18 @@ public sealed class DemoBackendTests : IDisposable
     }
 
     [Fact]
-    public async Task Utterance_SubmitsToTheApiWithCallbackUrl_AndRegistersTheConnection()
+    public async Task Utterance_SubmitsToTheApi_WithACallbackUrlCarryingTheSession()
     {
-        var jobId = Guid.NewGuid();
+        var session = Guid.NewGuid();
         _api.Given(Request.Create().WithPath("/api/v1/transcriptions").UsingPost().WithHeader("X-API-KEY", ApiKey))
-            .RespondWith(Response.Create().WithStatusCode(202).WithBodyAsJson(Job(jobId, JobStatus.Queued)));
+            .RespondWith(Response.Create().WithStatusCode(202).WithBodyAsJson(Job(Guid.NewGuid(), JobStatus.Queued)));
         using var client = _demo.CreateClient();
 
-        var response = await client.PostAsync(new Uri(DemoRoutes.Utterances, UriKind.Relative), Utterance("connection-1"), TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(new Uri(DemoRoutes.Utterances, UriKind.Relative), Utterance(session), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var forwarded = _api.LogEntries.Should().ContainSingle().Subject.RequestMessage!;
-        forwarded.Body.Should().Contain("http://demo-web:8080/callbacks/transcriptions").And.Contain("name=language");
-
-        await client.PostAsync(new Uri(DemoRoutes.Callbacks, UriKind.Relative), Callback(Job(jobId, JobStatus.Completed)), TestContext.Current.CancellationToken);
-        _hub.Pushed.Should().ContainSingle().Which.Connection.Should().Be("connection-1");
+        forwarded.Body.Should().Contain($"http://demo-web:8080/callbacks/transcriptions?session={session}").And.Contain("name=language");
     }
 
     [Fact]
@@ -70,10 +66,22 @@ public sealed class DemoBackendTests : IDisposable
                 .WithBody("""{"title":"Unsupported recording","status":400,"detail":"Expected PCM 16-bit"}"""));
         using var client = _demo.CreateClient();
 
-        var response = await client.PostAsync(new Uri(DemoRoutes.Utterances, UriKind.Relative), Utterance("connection-1"), TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(new Uri(DemoRoutes.Utterances, UriKind.Relative), Utterance(Guid.NewGuid()), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         (await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).Should().Contain("Expected PCM 16-bit");
+    }
+
+    [Fact]
+    public async Task Utterance_ApiUnreachable_Returns503Problem()
+    {
+        _api.Stop();
+        using var client = _demo.CreateClient();
+
+        var response = await client.PostAsync(new Uri(DemoRoutes.Utterances, UriKind.Relative), Utterance(Guid.NewGuid()), TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        response.Content.Headers.ContentType!.MediaType.Should().Be("application/problem+json");
     }
 
     [Fact]
@@ -81,43 +89,28 @@ public sealed class DemoBackendTests : IDisposable
     {
         using var client = _demo.CreateClient();
 
-        var response = await client.PostAsync(new Uri(DemoRoutes.Callbacks, UriKind.Relative), Callback(Job(Guid.NewGuid(), JobStatus.Completed), "sha256=00"), TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(CallbackUri(Guid.NewGuid()), Callback(Job(Guid.NewGuid(), JobStatus.Completed), "sha256=00"), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
         _hub.Pushed.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Callback_WithValidSignature_PushesToTheRegisteredConnection()
+    public async Task Callback_WithValidSignature_PushesToTheSessionGroup()
     {
-        var job = Job(Guid.NewGuid(), JobStatus.Completed, "Ile kosztuje paleta?");
-        await _demo.Services.GetRequiredService<TranscriptionRelay>().RegisterAsync(job.Id, "connection-7");
+        var session = Guid.NewGuid();
         using var client = _demo.CreateClient();
 
-        var response = await client.PostAsync(new Uri(DemoRoutes.Callbacks, UriKind.Relative), Callback(job), TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(CallbackUri(session), Callback(Job(Guid.NewGuid(), JobStatus.Completed, "Ile kosztuje paleta?")), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var (connection, transcription) = _hub.Pushed.Should().ContainSingle().Subject;
-        connection.Should().Be("connection-7");
+        var (group, transcription) = _hub.Pushed.Should().ContainSingle().Subject;
+        group.Should().Be(session.ToString());
         transcription.FullText.Should().Be("Ile kosztuje paleta?");
     }
 
     [Fact]
-    public async Task Callback_ArrivingBeforeTheUploadRegistersItsJob_IsDeliveredOnRegistration()
-    {
-        // A fast GPU worker can finish before the API's 202 reaches the demo backend.
-        var job = Job(Guid.NewGuid(), JobStatus.Completed, "Szybciej niż odpowiedź");
-        using var client = _demo.CreateClient();
-        await client.PostAsync(new Uri(DemoRoutes.Callbacks, UriKind.Relative), Callback(job), TestContext.Current.CancellationToken);
-
-        await _demo.Services.GetRequiredService<TranscriptionRelay>().RegisterAsync(job.Id, "connection-3");
-        await Eventually.TrueAsync(() => _hub.Pushed.Count == 1);
-
-        _hub.Pushed.Single().Connection.Should().Be("connection-3");
-    }
-
-    [Fact]
-    public async Task Callback_ForAJobNobodyRegistered_IsAcknowledged()
+    public async Task Callback_WithoutASession_IsAcknowledged_AndPushesNothing()
     {
         using var client = _demo.CreateClient();
 
@@ -136,14 +129,16 @@ public sealed class DemoBackendTests : IDisposable
     private static TranscriptionResponse Job(Guid id, JobStatus status, string? text = null) =>
         new(id, status, "pl", DateTimeOffset.UtcNow, null, "whispernet", text, [], null, TimeSpan.FromSeconds(1), null);
 
-    private static MultipartFormDataContent Utterance(string connectionId)
+    private static Uri CallbackUri(Guid session) => new($"{DemoRoutes.Callbacks}?{DemoRoutes.SessionField}={session}", UriKind.Relative);
+
+    private static MultipartFormDataContent Utterance(Guid session)
     {
         var audio = new ByteArrayContent([1, 2, 3]);
         audio.Headers.ContentType = new MediaTypeHeaderValue("audio/wav");
         return new MultipartFormDataContent
         {
             { audio, "audio", "utterance.wav" },
-            { new StringContent(connectionId), DemoRoutes.ConnectionIdField },
+            { new StringContent(session.ToString()), DemoRoutes.SessionField },
         };
     }
 
@@ -161,7 +156,7 @@ public sealed class DemoBackendTests : IDisposable
     {
         public RecordingHubContext() => Clients = new RecordingClients(this);
 
-        public List<(string Connection, TranscriptionResponse Transcription)> Pushed { get; } = [];
+        public List<(string Group, TranscriptionResponse Transcription)> Pushed { get; } = [];
 
         public IHubClients<ITranscriptionClient> Clients { get; }
 
@@ -172,13 +167,13 @@ public sealed class DemoBackendTests : IDisposable
     {
         public ITranscriptionClient All => throw new NotSupportedException();
 
-        public ITranscriptionClient Client(string connectionId) => new Recorder(context, connectionId);
+        public ITranscriptionClient Client(string connectionId) => throw new NotSupportedException();
 
         public ITranscriptionClient AllExcept(IReadOnlyList<string> excludedConnectionIds) => throw new NotSupportedException();
 
         public ITranscriptionClient Clients(IReadOnlyList<string> connectionIds) => throw new NotSupportedException();
 
-        public ITranscriptionClient Group(string groupName) => throw new NotSupportedException();
+        public ITranscriptionClient Group(string groupName) => new Recorder(context, groupName);
 
         public ITranscriptionClient GroupExcept(string groupName, IReadOnlyList<string> excludedConnectionIds) => throw new NotSupportedException();
 
@@ -189,11 +184,11 @@ public sealed class DemoBackendTests : IDisposable
         public ITranscriptionClient Users(IReadOnlyList<string> userIds) => throw new NotSupportedException();
     }
 
-    private sealed class Recorder(RecordingHubContext context, string connectionId) : ITranscriptionClient
+    private sealed class Recorder(RecordingHubContext context, string group) : ITranscriptionClient
     {
         public Task TranscriptionFinished(TranscriptionResponse transcription)
         {
-            context.Pushed.Add((connectionId, transcription));
+            context.Pushed.Add((group, transcription));
             return Task.CompletedTask;
         }
     }

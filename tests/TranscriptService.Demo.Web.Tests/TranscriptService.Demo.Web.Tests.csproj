@@ -7,10 +7,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="..\TranscriptService.Api.Tests\Support\Eventually.cs" Link="Eventually.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\..\src\TranscriptService.Demo.Web\TranscriptService.Demo.Web.csproj" />
   </ItemGroup>
 

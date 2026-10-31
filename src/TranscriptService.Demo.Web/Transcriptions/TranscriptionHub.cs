@@ -3,12 +3,12 @@ using TranscriptService.Demo.Web.Client.Transcriptions;
 
 namespace TranscriptService.Demo.Web.Transcriptions;
 
-/// <summary>Pushes finished transcriptions to the browser that submitted them.</summary>
-public sealed class TranscriptionHub(TranscriptionRelay relay) : Hub<ITranscriptionClient>
+/// <summary>
+/// Pushes finished transcriptions to browsers. Each page joins the group named after its session,
+/// so the backend keeps no routing state and results survive reconnects.
+/// </summary>
+public sealed class TranscriptionHub : Hub<ITranscriptionClient>
 {
-    public override Task OnDisconnectedAsync(Exception? exception)
-    {
-        relay.Forget(Context.ConnectionId);
-        return base.OnDisconnectedAsync(exception);
-    }
+    [HubMethodName(DemoRoutes.JoinSession)]
+    public Task JoinSessionAsync(Guid session) => Groups.AddToGroupAsync(Context.ConnectionId, session.ToString());
 }
