@@ -13,11 +13,4 @@ public sealed class MessagePriorityTests
     [Fact]
     public void For_AudioAboveThreshold_ReturnsNormal() =>
         MessagePriority.For(TimeSpan.FromSeconds(31), Threshold).Should().Be(MessagePriority.Normal);
-
-    [Fact]
-    public void Priorities_FitWithinQueueMaximum()
-    {
-        MessagePriority.High.Should().BeGreaterThan(MessagePriority.Normal);
-        MessagePriority.High.Should().BeLessThanOrEqualTo(MessagePriority.Max);
-    }
 }

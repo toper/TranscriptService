@@ -1,5 +1,4 @@
 using System.Text.Json;
-using TranscriptService.Contracts;
 using TranscriptService.Contracts.Messages;
 
 namespace TranscriptService.Contracts.Tests;
@@ -23,10 +22,7 @@ public sealed class MessageSerializationTests
             AudioDuration: TimeSpan.FromSeconds(1.5),
             ProcessingTime: TimeSpan.FromMilliseconds(250));
 
-        var json = JsonSerializer.Serialize(original, WebOptions);
-        var restored = JsonSerializer.Deserialize<TranscriptionCompleted>(json, WebOptions);
-
-        restored.Should().BeEquivalentTo(original);
+        RoundTrip(original).Should().BeEquivalentTo(original);
     }
 
     [Fact]

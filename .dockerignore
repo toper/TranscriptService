@@ -13,5 +13,3 @@ data/
 docs/
 tests/
 deploy/
-**/*.md
-!README.md
