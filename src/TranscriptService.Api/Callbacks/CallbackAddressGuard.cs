@@ -6,16 +6,19 @@ namespace TranscriptService.Api.Callbacks;
 /// <summary>
 /// Keeps signed callbacks from being aimed at the API's own network (SSRF). The check runs on the
 /// address actually connected to, after DNS resolution, so a public name resolving to a private
-/// address is refused too. Deployments whose receivers are internal (the demo) opt out explicitly.
+/// address is refused too. Deployments whose receivers are internal opt out explicitly: per host
+/// (the demo in compose) or, for tests and closed networks, for every private address.
 /// </summary>
 internal static class CallbackAddressGuard
 {
-    public static SocketsHttpHandler CreateHandler(bool allowPrivateAddresses) => new()
+    public static SocketsHttpHandler CreateHandler(bool allowPrivateAddresses, IReadOnlyCollection<string> allowedHosts) => new()
     {
         ConnectCallback = async (context, cancellationToken) =>
         {
-            var addresses = await Dns.GetHostAddressesAsync(context.DnsEndPoint.Host, cancellationToken).ConfigureAwait(false);
-            var allowed = addresses.Where(address => allowPrivateAddresses || IsPublic(address)).ToArray();
+            var host = context.DnsEndPoint.Host;
+            var trusted = allowPrivateAddresses || allowedHosts.Contains(host, StringComparer.OrdinalIgnoreCase);
+            var addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+            var allowed = addresses.Where(address => trusted || IsPublic(address)).ToArray();
             if (allowed.Length == 0)
             {
                 throw new HttpRequestException($"Callback host '{context.DnsEndPoint.Host}' resolves only to private or reserved addresses.");

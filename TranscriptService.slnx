@@ -3,6 +3,8 @@
     <Project Path="src/TranscriptService.Api/TranscriptService.Api.csproj" />
     <Project Path="src/TranscriptService.Audio/TranscriptService.Audio.csproj" />
     <Project Path="src/TranscriptService.Contracts/TranscriptService.Contracts.csproj" />
+    <Project Path="src/TranscriptService.Demo.Web.Client/TranscriptService.Demo.Web.Client.csproj" />
+    <Project Path="src/TranscriptService.Demo.Web/TranscriptService.Demo.Web.csproj" />
     <Project Path="src/TranscriptService.ServiceDefaults/TranscriptService.ServiceDefaults.csproj" />
     <Project Path="src/TranscriptService.Worker.Core/TranscriptService.Worker.Core.csproj" />
     <Project Path="src/TranscriptService.Worker.FasterWhisper/TranscriptService.Worker.FasterWhisper.csproj" />
@@ -13,6 +15,7 @@
     <Project Path="tests/TranscriptService.Api.Tests/TranscriptService.Api.Tests.csproj" />
     <Project Path="tests/TranscriptService.Audio.Tests/TranscriptService.Audio.Tests.csproj" />
     <Project Path="tests/TranscriptService.Contracts.Tests/TranscriptService.Contracts.Tests.csproj" />
+    <Project Path="tests/TranscriptService.Demo.Web.Tests/TranscriptService.Demo.Web.Tests.csproj" />
     <Project Path="tests/TranscriptService.Engines.Tests/TranscriptService.Engines.Tests.csproj" />
     <Project Path="tests/TranscriptService.IntegrationTests/TranscriptService.IntegrationTests.csproj" />
     <Project Path="tests/TranscriptService.Worker.Core.Tests/TranscriptService.Worker.Core.Tests.csproj" />

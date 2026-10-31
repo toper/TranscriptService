@@ -5,6 +5,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using TranscriptService.Api.Options;
+using TranscriptService.Contracts.Http;
 
 namespace TranscriptService.Api.Security;
 
@@ -18,7 +19,7 @@ internal sealed class ApiKeyAuthenticationHandler(
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "ApiKey";
-    public const string HeaderName = "X-API-KEY";
+    public const string HeaderName = ApiKeyHeader.Name;
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {

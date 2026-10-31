@@ -48,6 +48,9 @@ jobs:
           - name: api
             dockerfile: src/TranscriptService.Api/Dockerfile
             target: final
+          - name: demo
+            dockerfile: src/TranscriptService.Demo.Web/Dockerfile
+            target: final
           - name: whispernet-cpu
             dockerfile: deploy/worker.Dockerfile
             target: runtime-cpu

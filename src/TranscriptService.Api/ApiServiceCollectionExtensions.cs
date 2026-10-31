@@ -80,7 +80,10 @@ internal static class ApiServiceCollectionExtensions
         services.AddHostedService<CallbackDispatcher>();
         services.AddHttpClient(CallbackDispatcher.HttpClientName)
             .ConfigurePrimaryHttpMessageHandler(provider =>
-                CallbackAddressGuard.CreateHandler(provider.GetRequiredService<IOptions<ApiOptions>>().Value.AllowPrivateCallbackAddresses))
+            {
+                var api = provider.GetRequiredService<IOptions<ApiOptions>>().Value;
+                return CallbackAddressGuard.CreateHandler(api.AllowPrivateCallbackAddresses, api.AllowedCallbackHosts);
+            })
             .AddStandardResilienceHandler(configuration.GetSection("CallbackDelivery"))
             .SelectPipelineByAuthority();
         return services;
