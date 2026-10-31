@@ -1,4 +1,6 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using TranscriptService.Api.Endpoints;
@@ -18,6 +20,13 @@ builder.Services.AddOptions<ApiOptions>()
     .ValidateOnStart();
 
 builder.Services.AddProblemDetails();
+builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+// The endpoint enforces the exact recording limit with a 413 problem response; the transport
+// limits only add headroom for multipart framing and form fields.
+var maxRequestBytes = (builder.Configuration.GetValue<long?>("Api:MaxUploadBytes") ?? new ApiOptions().MaxUploadBytes) + (1024 * 1024);
+builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = maxRequestBytes);
+builder.Services.Configure<FormOptions>(form => form.MultipartBodyLengthLimit = maxRequestBytes);
 builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
     .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, configureOptions: null);
 builder.Services.AddAuthorization();
@@ -44,7 +53,11 @@ builder.Services.AddSingleton<ITranscriptionRequestPublisher, EasyNetQRequestPub
 
 var app = builder.Build();
 
-app.UseExceptionHandler();
+app.UseExceptionHandler(new ExceptionHandlerOptions
+{
+    // Malformed requests (e.g. a broken multipart body) are the client's fault, not a 500.
+    StatusCodeSelector = exception => exception is BadHttpRequestException badRequest ? badRequest.StatusCode : StatusCodes.Status500InternalServerError,
+});
 app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
