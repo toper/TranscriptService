@@ -48,15 +48,14 @@ jobs:
           - name: api
             dockerfile: src/TranscriptService.Api/Dockerfile
             target: final
-            device: cpu
           - name: whispernet-cpu
-            dockerfile: src/TranscriptService.Worker.WhisperNet/Dockerfile
+            dockerfile: deploy/worker.Dockerfile
             target: runtime-cpu
-            device: cpu
+            worker: WhisperNet
           - name: whispernet-cuda
-            dockerfile: src/TranscriptService.Worker.WhisperNet/Dockerfile
+            dockerfile: deploy/worker.Dockerfile
             target: runtime-cuda
-            device: cuda
+            worker: WhisperNet
     name: docker (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
@@ -68,8 +67,8 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
-          build-args: COMPUTE_DEVICE=${{ matrix.device }}
+          build-args: WORKER=${{ matrix.worker }}
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
           # CUDA layers are several GB; caching them would evict everything else from the 10 GB cache.
-          cache-to: ${{ matrix.device == 'cpu' && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}
+          cache-to: ${{ matrix.target != 'runtime-cuda' && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}

@@ -17,9 +17,10 @@ public sealed partial class WhisperNetTranscriber(
     ILogger<WhisperNetTranscriber> logger) : ITranscriber
 {
     private WhisperFactory? _factory;
-    private HashSet<string> _languages = [];
 
     public string EngineName => "whispernet";
+
+    public IReadOnlySet<string> SupportedLanguages { get; private set; } = new HashSet<string>();
 
     public Task InitializeAsync(CancellationToken cancellationToken)
     {
@@ -34,7 +35,7 @@ public sealed partial class WhisperNetTranscriber(
             ? [RuntimeLibrary.Cuda]
             : [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
         _factory = WhisperFactory.FromPath(settings.ModelPath);
-        _languages = [.. WhisperFactory.GetSupportedLanguages()];
+        SupportedLanguages = WhisperFactory.GetSupportedLanguages().ToHashSet(StringComparer.Ordinal);
 
         if (settings.Device == ComputeDevice.Cuda && RuntimeOptions.LoadedLibrary != RuntimeLibrary.Cuda)
         {
@@ -49,10 +50,6 @@ public sealed partial class WhisperNetTranscriber(
     {
         ArgumentNullException.ThrowIfNull(audio);
         var factory = _factory ?? throw new InvalidOperationException("The model is not loaded.");
-        if (!_languages.Contains(language))
-        {
-            throw new TranscriptionRejectedException($"Whisper does not support the language '{language}'.");
-        }
 
         var processor = factory.CreateBuilder()
             .WithLanguage(language)
@@ -63,25 +60,12 @@ public sealed partial class WhisperNetTranscriber(
             var segments = new List<TranscriptSegment>();
             await foreach (var segment in processor.ProcessAsync(audio.Samples, cancellationToken).ConfigureAwait(false))
             {
-                var text = segment.Text.Trim();
-                if (IsSpeech(text))
-                {
-                    segments.Add(new TranscriptSegment(text, segment.Start, segment.End));
-                }
+                segments.Add(new TranscriptSegment(segment.Text, segment.Start, segment.End));
             }
 
-            return new TranscriptionOutput(string.Join(' ', segments.Select(s => s.Text)), segments);
+            return TranscriptionOutput.FromSegments(segments);
         }
     }
-
-    /// <summary>
-    /// Whisper marks silence, music and noise with bracketed captions such as <c>[BLANK_AUDIO]</c> or
-    /// <c>(muzyka)</c>; on call recordings with hold music they are not part of what was said.
-    /// </summary>
-    internal static bool IsSpeech(string text) =>
-        text.Length > 0
-        && !(text.StartsWith('[') && text.EndsWith(']'))
-        && !(text.StartsWith('(') && text.EndsWith(')'));
 
     public ValueTask DisposeAsync()
     {

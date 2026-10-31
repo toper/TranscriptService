@@ -8,12 +8,15 @@
 name: transcriptservice
 
 x-worker: &worker
-  environment: &worker-environment
-    ConnectionStrings__RabbitMq: host=rabbitmq
   volumes:
     - data:/data:ro
     - models:/models:ro
   restart: unless-stopped
+
+x-worker-build: &worker-build
+  context: ..
+  dockerfile: deploy/worker.Dockerfile
+  target: runtime-cpu
 
 x-models-init: &models-init
   image: curlimages/curl:8.11.1
@@ -68,13 +71,11 @@ services:
     profiles: [whispernet]
     image: transcriptservice-whispernet:cpu
     build:
-      context: ..
-      dockerfile: src/TranscriptService.Worker.WhisperNet/Dockerfile
-      target: runtime-cpu
+      <<: *worker-build
       args:
-        COMPUTE_DEVICE: cpu
+        WORKER: WhisperNet
     environment:
-      <<: *worker-environment
+      ConnectionStrings__RabbitMq: host=rabbitmq
       Engine__ModelPath: /models/${WHISPERNET_MODEL:-whispernet/ggml-large-v3-turbo-q5_0.bin}
     depends_on:
       rabbitmq:

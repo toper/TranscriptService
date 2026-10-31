@@ -16,5 +16,3 @@ services:
     image: transcriptservice-whispernet:cuda
     build:
       target: runtime-cuda
-      args:
-        COMPUTE_DEVICE: cuda

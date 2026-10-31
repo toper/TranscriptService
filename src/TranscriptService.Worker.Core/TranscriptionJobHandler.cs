@@ -29,6 +29,13 @@ public sealed partial class TranscriptionJobHandler(
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (!transcriber.SupportedLanguages.Contains(command.Language))
+            {
+                throw new TranscriptionRejectedException(
+                    $"The {transcriber.EngineName} engine does not support the language '{command.Language}'. " +
+                    $"Supported: {string.Join(", ", transcriber.SupportedLanguages.Order(StringComparer.Ordinal))}.");
+            }
+
             var audio = await AudioPreprocessor.LoadAsync(command.AudioPath, cancellationToken).ConfigureAwait(false);
             var output = await transcriber.TranscribeAsync(audio, command.Language, cancellationToken).ConfigureAwait(false);
             completed = new TranscriptionCompleted(

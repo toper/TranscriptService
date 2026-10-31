@@ -115,6 +115,8 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
 
         public string EngineName => "fake";
 
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl" };
+
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken) =>
