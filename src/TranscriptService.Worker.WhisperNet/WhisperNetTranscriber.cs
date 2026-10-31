@@ -16,8 +16,6 @@ public sealed partial class WhisperNetTranscriber(
     IOptions<WhisperNetOptions> options,
     ILogger<WhisperNetTranscriber> logger) : ITranscriber
 {
-    private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(30);
-
     private readonly InFlightTracker _inFlight = new();
     private WhisperFactory? _factory;
 
@@ -71,16 +69,12 @@ public sealed partial class WhisperNetTranscriber(
         }
     }
 
-    public async ValueTask DisposeAsync()
+    // Native decoding cannot be interrupted: free the model only once no transcription uses it.
+    public ValueTask DisposeAsync() => _inFlight.DisposeWhenIdleAsync(() =>
     {
-        // Native decoding cannot be interrupted; freeing the model under it would crash the process.
-        if (await _inFlight.WaitIdleAsync(DisposeWait).ConfigureAwait(false))
-        {
-            _factory?.Dispose();
-        }
-
+        _factory?.Dispose();
         _factory = null;
-    }
+    });
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Loaded GGML model {ModelPath} on the {Runtime} runtime")]
     private partial void LogLoaded(string modelPath, RuntimeLibrary? runtime);

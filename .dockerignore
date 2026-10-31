@@ -13,3 +13,4 @@ data/
 docs/
 tests/
 deploy/
+!deploy/worker.sh

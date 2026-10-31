@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using TranscriptService.Audio;
-using TranscriptService.Audio.Tests;
 using TranscriptService.Worker.WhisperNet;
 
 namespace TranscriptService.Engines.Tests;
@@ -14,22 +12,8 @@ public sealed class WhisperNetTranscriberTests
     {
         await using var transcriber = Create(ModelRequirement.PathOrSkip(ModelFile));
         await transcriber.InitializeAsync(TestContext.Current.CancellationToken);
-        var call = WavFixtures.WriteTemp(WavFixtures.SampleAt8kHzMuLaw());
-        try
-        {
-            var audio = await AudioPreprocessor.LoadAsync(call, TestContext.Current.CancellationToken);
 
-            var output = await transcriber.TranscribeAsync(audio, "pl", TestContext.Current.CancellationToken);
-
-            // The sample is synthetic speech (eSpeak NG); these words survive 8 kHz μ-law reliably.
-            output.FullText.Should().ContainEquivalentOf("Konarskiego").And.ContainEquivalentOf("przepraszamy");
-            output.Segments.Should().NotBeEmpty().And.BeInAscendingOrder(segment => segment.Start);
-            output.Segments.Should().OnlyContain(segment => segment.End > segment.Start && segment.End <= audio.Duration);
-        }
-        finally
-        {
-            File.Delete(call);
-        }
+        await TelephoneSample.AssertTranscribesAsync(transcriber, "Konarskiego", "przepraszamy");
     }
 
     [Fact]

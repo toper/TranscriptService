@@ -22,6 +22,22 @@ public sealed class InFlightTracker
         return new Exit(this);
     }
 
+    /// <summary>How long an engine waits for running transcriptions before giving up on freeing its model.</summary>
+    public static readonly TimeSpan DefaultDisposeWait = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Frees an engine's native resources once nothing runs any more. If work is still running after
+    /// the wait, the resources are left to the process exit rather than freed under a native call.
+    /// </summary>
+    public async ValueTask DisposeWhenIdleAsync(Action free, TimeSpan? wait = null)
+    {
+        ArgumentNullException.ThrowIfNull(free);
+        if (await WaitIdleAsync(wait ?? DefaultDisposeWait).ConfigureAwait(false))
+        {
+            free();
+        }
+    }
+
     /// <returns><see langword="true"/> when nothing is running any more; <see langword="false"/> on timeout.</returns>
     public async Task<bool> WaitIdleAsync(TimeSpan timeout)
     {

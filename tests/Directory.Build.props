@@ -4,7 +4,6 @@
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
-    <!-- Test method names use underscores (Method_Scenario_Expectation). -->
     <!-- Test method names use underscores; inline arrays in test data are fine. -->
     <NoWarn>$(NoWarn);CA1707;CA1861</NoWarn>
   </PropertyGroup>

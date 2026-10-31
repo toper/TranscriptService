@@ -18,8 +18,6 @@ public sealed partial class FasterWhisperTranscriber(
     IOptions<FasterWhisperOptions> options,
     ILogger<FasterWhisperTranscriber> logger) : ITranscriber
 {
-    private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(30);
-
     private readonly InFlightTracker _inFlight = new();
     private WhisperModel? _model;
 
@@ -69,16 +67,12 @@ public sealed partial class FasterWhisperTranscriber(
         return TranscriptionOutput.FromSegments(segments, audio.Duration);
     }
 
-    public async ValueTask DisposeAsync()
+    // Native decoding cannot be interrupted: free the model only once no transcription uses it.
+    public ValueTask DisposeAsync() => _inFlight.DisposeWhenIdleAsync(() =>
     {
-        // Native decoding cannot be interrupted; freeing the weights under it would crash the process.
-        if (await _inFlight.WaitIdleAsync(DisposeWait).ConfigureAwait(false))
-        {
-            _model?.Dispose();
-        }
-
+        _model?.Dispose();
         _model = null;
-    }
+    });
 
     /// <summary>
     /// Languages of a CTranslate2 Whisper model: the vocabulary tokens listed in <c>lang_ids</c> of
