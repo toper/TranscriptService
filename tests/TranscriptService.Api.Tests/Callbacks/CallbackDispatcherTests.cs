@@ -40,6 +40,23 @@ public sealed class CallbackDispatcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispatch_SameJobQueuedTwice_DeliversOnce_AndKeepsRunning()
+    {
+        _client.Given(Request.Create().WithPath("/hook").UsingPost())
+            .RespondWith(Response.Create().WithStatusCode(200).WithDelay(TimeSpan.FromMilliseconds(200)));
+        var duplicated = await AddFinishedJobAsync(_factory);
+        await DispatchAsync(_factory, duplicated.Id);
+
+        await WaitUntilAsync(_factory, async db => !await db.Jobs.AnyAsync(j => j.Id == duplicated.Id));
+        var next = await AddFinishedJobAsync(_factory);
+        await WaitUntilAsync(_factory, async db => !await db.Jobs.AnyAsync(j => j.Id == next.Id));
+
+        await WaitUntilLoggedAsync(2);
+        _client.LogEntries.Select(e => e.RequestMessage!.Headers![CallbackSigner.JobIdHeader].Single())
+            .Should().Equal(duplicated.Id.ToString(), next.Id.ToString());
+    }
+
+    [Fact]
     public async Task Dispatch_TransientFailureThenSuccess_Delivers()
     {
         _client.Given(Request.Create().WithPath("/hook").UsingPost()).InScenario("flaky").WillSetStateTo("recovered")

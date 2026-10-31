@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http.Json;
@@ -27,6 +28,9 @@ internal sealed partial class CallbackDispatcher(
 
     private const int MaxConcurrentDeliveries = 4;
 
+    /// <summary>A job can be queued twice (restart scan and a fresh result); it is delivered once.</summary>
+    private readonly ConcurrentDictionary<Guid, byte> _inFlight = new();
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await EnqueueUndeliveredAsync(stoppingToken).ConfigureAwait(false);
@@ -55,6 +59,29 @@ internal sealed partial class CallbackDispatcher(
     }
 
     private async ValueTask DeliverAsync(Guid jobId, CancellationToken cancellationToken)
+    {
+        if (!_inFlight.TryAdd(jobId, 0))
+        {
+            return;
+        }
+
+        try
+        {
+            await DeliverOnceAsync(jobId, cancellationToken).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // One job's failure (e.g. deleted meanwhile) must not stop delivery for everyone else.
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+#pragma warning restore CA1031
+        {
+            LogDeliveryCrashed(ex, jobId);
+        }
+        finally
+        {
+            _inFlight.TryRemove(jobId, out _);
+        }
+    }
+
+    private async Task DeliverOnceAsync(Guid jobId, CancellationToken cancellationToken)
     {
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<TranscriptionDbContext>();
@@ -104,6 +131,9 @@ internal sealed partial class CallbackDispatcher(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not deliver result of job {JobId} to {CallbackUrl} after retries")]
     private partial void LogUndeliverable(Guid jobId, Uri callbackUrl);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Delivering the result of job {JobId} failed")]
+    private partial void LogDeliveryCrashed(Exception exception, Guid jobId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Callback request for job {JobId} failed")]
     private partial void LogDeliveryError(Exception exception, Guid jobId);
