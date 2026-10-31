@@ -1,0 +1,203 @@
+@page "/"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@implements IAsyncDisposable
+@using TranscriptService.Contracts.Http
+@using TranscriptService.Demo.Web.Client.Recording
+@using TranscriptService.Demo.Web.Client.Transcriptions
+@inject ITranscriptionSession Session
+@inject IMicrophone Microphone
+
+<PageTitle>TranscriptService demo</PageTitle>
+
+<header class="hero">
+    <h1>Speak, and watch it become text</h1>
+    <p>
+        Each utterance is sent to the Transcript API like any phone recording; the engine worker's result comes back
+        as a signed callback and is pushed to this page over SignalR.
+    </p>
+</header>
+
+<section class="controls">
+    <button id="record" class="record @(_listening ? "listening" : null)" @onclick="ToggleRecordingAsync">
+        @(_listening ? "■ Stop" : "● Start recording")
+    </button>
+    <label class="upload">
+        or transcribe a WAV file
+        <InputFile accept=".wav,audio/wav" OnChange="UploadAsync" />
+    </label>
+</section>
+
+@if (_error is not null)
+{
+    <p class="error" role="alert">@_error</p>
+}
+
+<ol class="utterances" reversed>
+    @foreach (var utterance in _utterances)
+    {
+        <li class="utterance @utterance.State.ToString().ToLowerInvariant()">
+            <span class="source">@utterance.Source</span>
+            @switch (utterance.State)
+            {
+                case UtteranceState.Pending:
+                    <span class="text">Transcribing…</span>
+                    break;
+                case UtteranceState.Completed:
+                    <span class="text">@(string.IsNullOrEmpty(utterance.Result!.FullText) ? "(no speech)" : utterance.Result.FullText)</span>
+                    <span class="meta">@utterance.Result.Engine · @utterance.Result.AudioDuration.TotalSeconds.ToString("0.0") s audio · @utterance.Result.ProcessingTime?.TotalSeconds.ToString("0.00") s</span>
+                    break;
+                default:
+                    <span class="text">@utterance.Error</span>
+                    break;
+            }
+        </li>
+    }
+</ol>
+
+@code {
+    private const long MaxUploadBytes = 25 * 1024 * 1024;
+
+    private readonly List<Utterance> _utterances = [];
+
+    // A result can arrive over SignalR before the upload's HTTP response; it waits here for its row.
+    private readonly Dictionary<Guid, TranscriptionResponse> _early = [];
+
+    private bool _listening;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Finished += OnFinishedAsync;
+        Microphone.UtteranceRecorded += OnUtteranceAsync;
+        try
+        {
+            await Session.ConnectAsync(CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            _error = $"Cannot reach the demo backend: {ex.Message}";
+        }
+    }
+
+    private async Task ToggleRecordingAsync()
+    {
+        _error = null;
+        try
+        {
+            if (_listening)
+            {
+                await Microphone.StopAsync();
+            }
+            else
+            {
+                await Microphone.StartAsync();
+            }
+
+            _listening = !_listening;
+        }
+        catch (Microsoft.JSInterop.JSException ex)
+        {
+            _error = $"Microphone unavailable: {ex.Message}";
+        }
+    }
+
+    private Task OnUtteranceAsync(byte[] wav) =>
+        InvokeAsync(() => SubmitAsync(new MemoryStream(wav), "utterance.wav", "🎙 utterance"));
+
+    private async Task UploadAsync(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        try
+        {
+            await using var file = e.File.OpenReadStream(MaxUploadBytes);
+            var copy = new MemoryStream();
+            await file.CopyToAsync(copy);
+            copy.Position = 0;
+            await SubmitAsync(copy, e.File.Name, $"📄 {e.File.Name}");
+        }
+        catch (IOException ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SubmitAsync(Stream wav, string fileName, string source)
+    {
+        var utterance = new Utterance(source);
+        _utterances.Insert(0, utterance);
+        StateHasChanged();
+
+        try
+        {
+            await using (wav)
+            {
+                utterance.Id = await Session.SubmitAsync(wav, fileName, CancellationToken.None);
+            }
+
+            if (_early.Remove(utterance.Id.Value, out var result))
+            {
+                utterance.Finish(result);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            utterance.Fail(ex.Message);
+        }
+
+        StateHasChanged();
+    }
+
+    private Task OnFinishedAsync(TranscriptionResponse result) => InvokeAsync(() =>
+    {
+        var utterance = _utterances.Find(u => u.Id == result.Id);
+        if (utterance is null)
+        {
+            _early[result.Id] = result;
+            return;
+        }
+
+        utterance.Finish(result);
+        StateHasChanged();
+    });
+
+    public async ValueTask DisposeAsync()
+    {
+        Session.Finished -= OnFinishedAsync;
+        Microphone.UtteranceRecorded -= OnUtteranceAsync;
+        await Microphone.DisposeAsync();
+        await Session.DisposeAsync();
+    }
+
+    private enum UtteranceState
+    {
+        Pending,
+        Completed,
+        Failed,
+    }
+
+    private sealed class Utterance(string source)
+    {
+        public string Source { get; } = source;
+
+        public Guid? Id { get; set; }
+
+        public UtteranceState State { get; private set; } = UtteranceState.Pending;
+
+        public TranscriptionResponse? Result { get; private set; }
+
+        public string? Error { get; private set; }
+
+        public void Finish(TranscriptionResponse result)
+        {
+            Result = result;
+            State = result.Status == JobStatus.Completed ? UtteranceState.Completed : UtteranceState.Failed;
+            Error = result.FailureReason;
+        }
+
+        public void Fail(string error)
+        {
+            State = UtteranceState.Failed;
+            Error = error;
+        }
+    }
+}
