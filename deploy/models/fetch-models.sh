@@ -45,10 +45,15 @@ while read -r sha target url; do
             rm -rf "$work" && mkdir -p "$work/unpacked"
             download "$url" "$sha" "$work/archive.zip"
             unzip -q "$work/archive.zip" -d "$work/unpacked"
-            # Archives usually wrap the model in one top-level folder; use its content if so.
-            set -- "$work/unpacked"/*
+            # Archives usually wrap the model in one top-level folder (next to loose files such as a
+            # README or macOS __MACOSX metadata); use that folder's content if there is exactly one.
             content="$work/unpacked"
-            if [ "$#" -eq 1 ] && [ -d "$1" ]; then content="$1"; fi
+            folders=0
+            for entry in "$work/unpacked"/*/; do
+                case "$entry" in */__MACOSX/) continue ;; esac
+                if [ -d "$entry" ]; then folders=$((folders + 1)); folder="$entry"; fi
+            done
+            if [ "$folders" -eq 1 ]; then content="${folder%/}"; fi
             # Replace a previous model only once the new one is completely unpacked.
             rm -rf "$path.old"
             if [ -e "$path" ]; then mv "$path" "$path.old"; fi

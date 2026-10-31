@@ -9,13 +9,16 @@ public sealed class InFlightTracker
 {
     private readonly Lock _gate = new();
     private int _running;
+    private bool _disposing;
     private TaskCompletionSource? _idle;
 
     /// <summary>Marks one transcription as running until the returned handle is disposed.</summary>
+    /// <exception cref="ObjectDisposedException">The engine is freeing its model.</exception>
     public IDisposable Enter()
     {
         lock (_gate)
         {
+            ObjectDisposedException.ThrowIf(_disposing, this);
             _running++;
         }
 
@@ -26,12 +29,17 @@ public sealed class InFlightTracker
     public static readonly TimeSpan DefaultDisposeWait = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Frees an engine's native resources once nothing runs any more. If work is still running after
+    /// Refuses new work, then frees an engine's native resources once nothing runs any more. If work is still running after
     /// the wait, the resources are left to the process exit rather than freed under a native call.
     /// </summary>
     public async ValueTask DisposeWhenIdleAsync(Action free, TimeSpan? wait = null)
     {
         ArgumentNullException.ThrowIfNull(free);
+        lock (_gate)
+        {
+            _disposing = true;
+        }
+
         if (await WaitIdleAsync(wait ?? DefaultDisposeWait).ConfigureAwait(false))
         {
             free();

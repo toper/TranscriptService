@@ -8,11 +8,11 @@ public sealed class VoskOptions : EngineOptions, IValidatableObject
 {
     /// <summary>
     /// Language of the deployed model. A Vosk model recognizes exactly one language, and the model
-    /// files do not say which, so the deployment states it.
+    /// files do not say which, so the deployment must state it; there is deliberately no default.
     /// </summary>
     [Required]
     [RegularExpression("^[a-z]{2}$")]
-    public string ModelLanguage { get; set; } = "pl";
+    public string ModelLanguage { get; set; } = string.Empty;
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

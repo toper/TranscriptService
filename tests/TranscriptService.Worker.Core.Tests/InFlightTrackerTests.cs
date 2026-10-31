@@ -52,6 +52,16 @@ public sealed class InFlightTrackerTests
     }
 
     [Fact]
+    public async Task Enter_AfterDisposalStarted_IsRefused()
+    {
+        var tracker = new InFlightTracker();
+        await tracker.DisposeWhenIdleAsync(() => { });
+
+        FluentActions.Invoking(tracker.Enter).Should().Throw<ObjectDisposedException>(
+            "a job must not start on a model that is being freed");
+    }
+
+    [Fact]
     public async Task WaitIdle_NothingRunning_CompletesAtOnce() =>
         (await new InFlightTracker().WaitIdleAsync(TimeSpan.Zero)).Should().BeTrue();
 }

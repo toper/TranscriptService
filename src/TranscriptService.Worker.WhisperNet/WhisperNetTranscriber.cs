@@ -50,9 +50,9 @@ public sealed partial class WhisperNetTranscriber(
     public async Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audio);
+        using var running = _inFlight.Enter(); // before reading the model, so disposal cannot free it underneath
         var factory = _factory ?? throw new InvalidOperationException("The model is not loaded.");
 
-        using var running = _inFlight.Enter();
         var processor = factory.CreateBuilder()
             .WithLanguage(language)
             .WithThreads(options.Value.Threads)

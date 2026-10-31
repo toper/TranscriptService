@@ -19,12 +19,31 @@ public sealed class VoskTranscriberTests
     }
 
     [Fact]
-    public async Task SupportedLanguages_IsTheModelLanguage()
+    public async Task Transcribe_LanguageOtherThanTheModels_IsRejected()
     {
         await using var transcriber = Create(ModelRequirement.PathOrSkip(ModelDirectory));
         await transcriber.InitializeAsync(TestContext.Current.CancellationToken);
+        var silence = new TranscriptService.Audio.AudioSamples(new float[16_000], 16_000);
 
-        transcriber.SupportedLanguages.Should().BeEquivalentTo(["pl"]);
+        await FluentActions.Awaiting(() => transcriber.TranscribeAsync(silence, "en", TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<TranscriptionRejectedException>().WithMessage("*'pl'*");
+    }
+
+    [Fact]
+    public async Task Initialize_DirectoryWithoutAModel_FailsAtStartup()
+    {
+        var empty = Directory.CreateTempSubdirectory("not-a-vosk-model-");
+        try
+        {
+            await using var transcriber = Create(empty.FullName);
+
+            await FluentActions.Awaiting(() => transcriber.InitializeAsync(TestContext.Current.CancellationToken))
+                .Should().ThrowAsync<InvalidOperationException>().WithMessage("*could not load*");
+        }
+        finally
+        {
+            empty.Delete(recursive: true);
+        }
     }
 
     [Fact]
@@ -37,9 +56,19 @@ public sealed class VoskTranscriberTests
     }
 
     [Fact]
+    public void Options_WithoutModelLanguage_FailValidation()
+    {
+        var options = new VoskOptions { ModelPath = "/models/vosk/small-pl" };
+        var errors = new List<ValidationResult>();
+
+        Validator.TryValidateObject(options, new ValidationContext(options), errors, validateAllProperties: true).Should().BeFalse();
+        errors.Should().ContainSingle().Which.MemberNames.Should().Contain(nameof(VoskOptions.ModelLanguage));
+    }
+
+    [Fact]
     public void Options_CudaDevice_FailValidation()
     {
-        var options = new VoskOptions { ModelPath = "/models/vosk/small-pl", Device = ComputeDevice.Cuda };
+        var options = new VoskOptions { ModelPath = "/models/vosk/small-pl", ModelLanguage = "pl", Device = ComputeDevice.Cuda };
         var errors = new List<ValidationResult>();
 
         Validator.TryValidateObject(options, new ValidationContext(options), errors, validateAllProperties: true).Should().BeFalse();
@@ -47,6 +76,6 @@ public sealed class VoskTranscriberTests
     }
 
     private static VoskTranscriber Create(string modelDirectory) => new(
-        Microsoft.Extensions.Options.Options.Create(new VoskOptions { ModelPath = modelDirectory }),
+        Microsoft.Extensions.Options.Options.Create(new VoskOptions { ModelPath = modelDirectory, ModelLanguage = "pl" }),
         NullLogger<VoskTranscriber>.Instance);
 }

@@ -1,3 +1,5 @@
+using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Options;
@@ -12,6 +14,11 @@ namespace TranscriptService.Worker.Vosk;
 /// Vosk (Kaldi) engine: a lightweight CPU recognizer with word-level timestamps. The model is loaded
 /// once and shared; each job gets its own recognizer, as recognizers keep per-stream state.
 /// </summary>
+/// <remarks>
+/// The Vosk 0.3.38 .NET binding performs no error checking: a model or recognizer the native library
+/// failed to create is wrapped as a null handle, and using it crashes the process. Every native object
+/// is therefore checked right after construction.
+/// </remarks>
 public sealed partial class VoskTranscriber(
     IOptions<VoskOptions> options,
     ILogger<VoskTranscriber> logger) : ITranscriber
@@ -34,8 +41,15 @@ public sealed partial class VoskTranscriber(
             throw new DirectoryNotFoundException($"Vosk model directory not found: {settings.ModelPath}");
         }
 
-        global::Vosk.Vosk.SetLogLevel(-1); // Kaldi's own logging bypasses ours; failures still surface as exceptions.
-        _model = new Model(settings.ModelPath);
+        // Kaldi writes its warnings and errors (e.g. which model file is missing) to stderr; keep them.
+        global::Vosk.Vosk.SetLogLevel(0);
+        var model = new Model(settings.ModelPath);
+        if (IsNull(model))
+        {
+            throw new InvalidOperationException($"Vosk could not load a model from {settings.ModelPath}; see the Kaldi messages above.");
+        }
+
+        _model = model;
         SupportedLanguages = new HashSet<string>(StringComparer.Ordinal) { settings.ModelLanguage };
         LogLoaded(settings.ModelPath, settings.ModelLanguage);
         return Task.CompletedTask;
@@ -44,9 +58,13 @@ public sealed partial class VoskTranscriber(
     public async Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audio);
+        using var running = _inFlight.Enter(); // before reading the model, so disposal cannot free it underneath
         var model = _model ?? throw new InvalidOperationException("The model is not loaded.");
+        if (!SupportedLanguages.Contains(language))
+        {
+            throw new TranscriptionRejectedException($"The deployed Vosk model recognizes '{options.Value.ModelLanguage}' only; requested '{language}'.");
+        }
 
-        using var running = _inFlight.Enter();
         // Vosk decodes synchronously; run it off the caller's thread so cancellation and shutdown stay responsive.
         var words = await Task.Run(() => Recognize(model, audio, cancellationToken), cancellationToken).ConfigureAwait(false);
         return TranscriptionOutput.FromSegments(words, audio.Duration);
@@ -66,6 +84,11 @@ public sealed partial class VoskTranscriber(
     private static List<TranscriptSegment> Recognize(Model model, AudioSamples audio, CancellationToken cancellationToken)
     {
         using var recognizer = new VoskRecognizer(model, audio.SampleRate);
+        if (IsNull(recognizer))
+        {
+            throw new InvalidOperationException($"Vosk could not create a recognizer for {audio.SampleRate} Hz audio.");
+        }
+
         recognizer.SetWords(true);
 
         var words = new List<TranscriptSegment>();
@@ -87,6 +110,17 @@ public sealed partial class VoskTranscriber(
 
         words.AddRange(ParseWords(recognizer.FinalResult()));
         return words;
+    }
+
+    /// <summary>
+    /// Whether a Vosk object wraps a null native pointer. The binding keeps the pointer in a private
+    /// <c>handle</c> field (<see cref="HandleRef"/>) and exposes no public way to check it.
+    /// </summary>
+    private static bool IsNull(object native)
+    {
+        var field = native.GetType().GetField("handle", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"Unexpected Vosk binding: {native.GetType()} has no handle field.");
+        return ((HandleRef)field.GetValue(native)!).Handle == IntPtr.Zero;
     }
 
     private static IEnumerable<TranscriptSegment> ParseWords(string json) =>
