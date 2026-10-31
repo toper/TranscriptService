@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>Engine worker running Whisper.net (whisper.cpp, GGML models) on CPU or CUDA.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- docker build passes -p:ComputeDevice=cuda for the GPU image; the CUDA runtime adds ~300 MB. -->
+    <ComputeDevice Condition="'$(ComputeDevice)' == ''">cpu</ComputeDevice>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Linux" Condition="'$(ComputeDevice)' == 'cuda'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
+  </ItemGroup>
+
+</Project>

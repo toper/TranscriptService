@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <Compile Include="..\TranscriptService.Audio.Tests\WavFixtures.cs" Link="WavFixtures.cs" />
+    <None Include="..\TestData\sample.wav" Link="TestData\sample.wav" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TranscriptService.Worker.WhisperNet\TranscriptService.Worker.WhisperNet.csproj" />
+  </ItemGroup>
+
+</Project>

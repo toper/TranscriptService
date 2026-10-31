@@ -5,11 +5,13 @@
     <Project Path="src/TranscriptService.Contracts/TranscriptService.Contracts.csproj" />
     <Project Path="src/TranscriptService.ServiceDefaults/TranscriptService.ServiceDefaults.csproj" />
     <Project Path="src/TranscriptService.Worker.Core/TranscriptService.Worker.Core.csproj" />
+    <Project Path="src/TranscriptService.Worker.WhisperNet/TranscriptService.Worker.WhisperNet.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TranscriptService.Api.Tests/TranscriptService.Api.Tests.csproj" />
     <Project Path="tests/TranscriptService.Audio.Tests/TranscriptService.Audio.Tests.csproj" />
     <Project Path="tests/TranscriptService.Contracts.Tests/TranscriptService.Contracts.Tests.csproj" />
+    <Project Path="tests/TranscriptService.Engines.Tests/TranscriptService.Engines.Tests.csproj" />
     <Project Path="tests/TranscriptService.IntegrationTests/TranscriptService.IntegrationTests.csproj" />
     <Project Path="tests/TranscriptService.Worker.Core.Tests/TranscriptService.Worker.Core.Tests.csproj" />
   </Folder>
