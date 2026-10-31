@@ -2,7 +2,8 @@ namespace TranscriptService.Engines.Tests;
 
 /// <summary>
 /// Engine tests need real models, which are too large for the repository and CI. Point
-/// <c>MODELS_DIR</c> at a folder holding them (layout of <c>deploy/models/manifest.json</c>);
+/// <c>MODELS_DIR</c> at a folder holding them in the layout of <c>deploy/models/models.txt</c>
+/// (or run <c>deploy/models/fetch-models.sh &lt;engine&gt; &lt;dir&gt;</c>);
 /// without it the tests are reported as skipped, never as failed.
 /// </summary>
 internal static class ModelRequirement

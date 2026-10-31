@@ -33,6 +33,31 @@ public sealed class WhisperNetTranscriberTests
     }
 
     [Fact]
+    public async Task Transcribe_UnsupportedLanguage_IsRejectedWithReason()
+    {
+        await using var transcriber = Create(ModelRequirement.PathOrSkip(ModelFile));
+        await transcriber.InitializeAsync(TestContext.Current.CancellationToken);
+        var silence = new AudioSamples(new float[16_000], AudioPreprocessor.TargetSampleRate);
+
+        await FluentActions.Awaiting(() => transcriber.TranscribeAsync(silence, "xx", TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<TranscriptService.Worker.Core.TranscriptionRejectedException>().WithMessage("*'xx'*");
+    }
+
+    [Theory]
+    [InlineData("[BLANK_AUDIO]")]
+    [InlineData("(muzyka)")]
+    [InlineData("[Muzyka w tle]")]
+    [InlineData("")]
+    public void IsSpeech_NonSpeechMarkers_AreDropped(string text) =>
+        WhisperNetTranscriber.IsSpeech(text).Should().BeFalse();
+
+    [Theory]
+    [InlineData("Dzień dobry.")]
+    [InlineData("Paleta (euro) kosztuje 100 zł.")]
+    public void IsSpeech_Sentences_AreKept(string text) =>
+        WhisperNetTranscriber.IsSpeech(text).Should().BeTrue();
+
+    [Fact]
     public async Task Initialize_MissingModel_Throws()
     {
         await using var transcriber = Create(Path.Combine(Path.GetTempPath(), "missing-model.bin"));

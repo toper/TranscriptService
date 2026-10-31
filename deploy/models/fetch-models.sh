@@ -1,7 +1,8 @@
 #!/bin/sh
 # Downloads the models of one engine into the models volume and verifies their SHA-256.
-# Files that are already present and intact are kept, so restarts cost one checksum, not a download.
-# Usage: fetch-models.sh <engine> [models-dir]
+# Models that are already present and intact are kept, so a restart costs a checksum, not a download.
+# Runs in the models-init container (BusyBox) and on any Linux/WSL host:
+#   deploy/models/fetch-models.sh <engine> [models-dir]
 set -eu
 
 engine="${1:?usage: fetch-models.sh <engine> [models-dir]}"
@@ -14,40 +15,50 @@ if [ -z "$entries" ]; then
     exit 1
 fi
 
-verify() { echo "$1  $2" | sha256sum -c -s -; }
+sha_of() { sha256sum "$1" | cut -d ' ' -f 1; }
+
+download() { # url file
+    rm -f "$2"   # a stale partial file from an interrupted run cannot be resumed reliably
+    # HTTP/1.1 and resumable retries: large downloads over HTTP/2 CDNs are prone to reset streams.
+    curl --fail --location --http1.1 --retry 5 --retry-all-errors --continue-at - \
+        --silent --show-error --output "$2" "$1"
+}
 
 echo "$entries" | while read -r sha target url; do
-    file="$root/$target"
     case "$target" in
-        */) download="$root/.download/$(basename "$target").zip"; marker="$file.sha256" ;;
-        *)  download="$file.part"; marker="" ;;
+        */) # Archive (Vosk): unpacked into a directory, recorded by a checksum marker beside it.
+            dir="$root/${target%/}"
+            marker="$dir.sha256"
+            if [ -d "$dir" ] && [ -f "$marker" ] && [ "$(cat "$marker")" = "$sha" ]; then
+                echo "ok        $target"; continue
+            fi
+            echo "download  $target"
+            work="$root/.download/$(basename "$dir")"
+            rm -rf "$work" && mkdir -p "$work/unpacked"
+            download "$url" "$work/archive.zip"
+            [ "$(sha_of "$work/archive.zip")" = "$sha" ] || { echo "checksum mismatch for $url" >&2; exit 1; }
+            unzip -q "$work/archive.zip" -d "$work/unpacked"
+            # Archives usually wrap everything in one top-level folder; use its content if so.
+            set -- "$work/unpacked"/*
+            content="$work/unpacked"
+            if [ "$#" -eq 1 ] && [ -d "$1" ]; then content="$1"; fi
+            # Replace the previous model only once the new one is fully unpacked.
+            rm -rf "$dir.old" && { [ ! -d "$dir" ] || mv "$dir" "$dir.old"; }
+            mv "$content" "$dir" && rm -rf "$dir.old" "$work"
+            echo "$sha" > "$marker"
+            ;;
+        *)
+            file="$root/$target"
+            if [ -f "$file" ] && [ "$(sha_of "$file")" = "$sha" ]; then
+                echo "ok        $target"; continue
+            fi
+            echo "download  $target"
+            mkdir -p "$(dirname "$file")"
+            download "$url" "$file.part"
+            [ "$(sha_of "$file.part")" = "$sha" ] || { rm -f "$file.part"; echo "checksum mismatch for $url" >&2; exit 1; }
+            mv "$file.part" "$file"
+            ;;
     esac
-
-    if [ -n "$marker" ] && [ -f "$marker" ] && [ "$(cat "$marker")" = "$sha" ]; then
-        echo "ok        $target"; continue
-    fi
-    if [ -z "$marker" ] && [ -f "$file" ] && verify "$sha" "$file"; then
-        echo "ok        $target"; continue
-    fi
-
-    echo "download  $target"
-    mkdir -p "$(dirname "$download")" "$(dirname "$file")"
-    # HTTP/1.1 and resumable retries: large downloads over HTTP/2 CDNs are prone to reset streams.
-    curl --fail --location --http1.1 --retry 5 --retry-all-errors --continue-at -         --silent --show-error --output "$download" "$url"
-    if ! verify "$sha" "$download"; then
-        echo "checksum mismatch for $url" >&2
-        rm -f "$download"
-        exit 1
-    fi
-
-    if [ -n "$marker" ]; then
-        # Archives (Vosk models) are unpacked into the target directory.
-        rm -rf "$file" && mkdir -p "$file"
-        unzip -q "$download" -d "$file.unpack"
-        mv "$file.unpack"/*/* "$file" && rm -rf "$file.unpack" "$download"
-        echo "$sha" > "$marker"
-    else
-        mv "$download" "$file"
-    fi
-    chmod -R a+rX "$root"
 done
+
+chmod -R a+rX "$root"

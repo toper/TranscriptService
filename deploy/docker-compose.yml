@@ -26,7 +26,8 @@ services:
   rabbitmq:
     image: rabbitmq:4-management-alpine
     ports:
-      - "15672:15672"   # management UI (guest/guest from localhost)
+      # Management UI for local inspection only: bound to loopback, as guest/guest is the login.
+      - "127.0.0.1:15672:15672"
     volumes:
       - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-transcriptservice.conf:ro
       - rabbitmq-data:/var/lib/rabbitmq

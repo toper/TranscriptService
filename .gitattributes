@@ -61,3 +61,9 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+
+# Files executed or parsed inside Linux containers must keep LF endings on every platform.
+*.sh text eol=lf
+*.conf text eol=lf
+deploy/models/models.txt text eol=lf
+Dockerfile text eol=lf

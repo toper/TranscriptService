@@ -71,4 +71,5 @@ jobs:
           build-args: COMPUTE_DEVICE=${{ matrix.device }}
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          # CUDA layers are several GB; caching them would evict everything else from the 10 GB cache.
+          cache-to: ${{ matrix.device == 'cpu' && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}
