@@ -22,6 +22,8 @@
     <PackageVersion Include="Whisper.net" Version="1.9.1" />
     <PackageVersion Include="Whisper.net.Runtime" Version="1.9.1" />
     <PackageVersion Include="Whisper.net.Runtime.Cuda.Linux" Version="1.9.1" />
+    <PackageVersion Include="FasterWhisper.NET" Version="1.0.8" />
+    <PackageVersion Include="FasterWhisper.NET.Gpu" Version="1.0.8" />
   </ItemGroup>
 
   <ItemGroup Label="Audio">

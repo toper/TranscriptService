@@ -56,6 +56,16 @@ jobs:
             dockerfile: deploy/worker.Dockerfile
             target: runtime-cuda
             worker: WhisperNet
+          - name: fasterwhisper-cpu
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cpu
+            worker: FasterWhisper
+          - name: fasterwhisper-cuda
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cuda
+            worker: FasterWhisper
+            cuda-image: nvidia/cuda:12.8.1-runtime-ubuntu22.04
+            cuda-packages: libcudnn8
     name: docker (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4
@@ -67,7 +77,10 @@ jobs:
           context: .
           file: ${{ matrix.dockerfile }}
           target: ${{ matrix.target }}
-          build-args: WORKER=${{ matrix.worker }}
+          build-args: |
+            WORKER=${{ matrix.worker }}
+            ${{ matrix.cuda-image && format('CUDA_IMAGE={0}', matrix.cuda-image) || '' }}
+            ${{ matrix.cuda-packages && format('CUDA_PACKAGES={0}', matrix.cuda-packages) || '' }}
           push: false
           cache-from: type=gha,scope=${{ matrix.name }}
           # CUDA layers are several GB; caching them would evict everything else from the 10 GB cache.

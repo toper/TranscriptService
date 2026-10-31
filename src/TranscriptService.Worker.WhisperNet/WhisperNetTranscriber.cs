@@ -63,7 +63,7 @@ public sealed partial class WhisperNetTranscriber(
                 segments.Add(new TranscriptSegment(segment.Text, segment.Start, segment.End));
             }
 
-            return TranscriptionOutput.FromSegments(segments);
+            return TranscriptionOutput.FromSegments(segments, audio.Duration);
         }
     }
 

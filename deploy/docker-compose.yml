@@ -83,6 +83,29 @@ services:
       models-init-whispernet:
         condition: service_completed_successfully
 
+  # ---- FasterWhisper.NET (CTranslate2) — meant for GPU: on CPU a short call takes tens of seconds.
+  models-init-fasterwhisper:
+    <<: *models-init
+    profiles: [fasterwhisper]
+    command: ["sh", "/scripts/fetch-models.sh", "fasterwhisper", "/models"]
+
+  worker-fasterwhisper:
+    <<: *worker
+    profiles: [fasterwhisper]
+    image: transcriptservice-fasterwhisper:cpu
+    build:
+      <<: *worker-build
+      args:
+        WORKER: FasterWhisper
+    environment:
+      ConnectionStrings__RabbitMq: host=rabbitmq
+      Engine__ModelPath: /models/${FASTERWHISPER_MODEL:-fasterwhisper/large-v3-turbo}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      models-init-fasterwhisper:
+        condition: service_completed_successfully
+
 volumes:
   data:       # recordings and the job database, owned by the API
   models:     # speech models, fetched by models-init-* and mounted read-only by workers

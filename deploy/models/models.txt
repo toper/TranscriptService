@@ -1,3 +1,8 @@
 # Models fetched by fetch-models.sh into the shared /models volume.
 # engine      sha256                                                            target                                      url
 whispernet    394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2  whispernet/ggml-large-v3-turbo-q5_0.bin     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo-q5_0.bin
+fasterwhisper e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da  fasterwhisper/large-v3-turbo/model.bin  https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo/resolve/main/model.bin
+fasterwhisper b0253ea6c0d3bea6b1e19e91a02acfd3b53f4467362efcb5a3e6b16c9b3a9b7e  fasterwhisper/large-v3-turbo/config.json  https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo/resolve/main/config.json
+fasterwhisper 7ccc62c6f2765af1f3b46c00c9b5894426835a05021c8b9c01eecb6dfb542711  fasterwhisper/large-v3-turbo/preprocessor_config.json  https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo/resolve/main/preprocessor_config.json
+fasterwhisper 297b13372ac43916285644fb9687add3cc62ee2a1adb60da3dc25cc94c1871fd  fasterwhisper/large-v3-turbo/tokenizer.json  https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo/resolve/main/tokenizer.json
+fasterwhisper c69260f2ab26d659b7c398f9a2b2b48ed0df16c3b47d7326782fd9cba71690c1  fasterwhisper/large-v3-turbo/vocabulary.json  https://huggingface.co/mobiuslabsgmbh/faster-whisper-large-v3-turbo/resolve/main/vocabulary.json
