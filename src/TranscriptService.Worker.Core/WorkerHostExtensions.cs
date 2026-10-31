@@ -38,7 +38,7 @@ public static class WorkerHostExtensions
         services.AddSingleton<TranscriptionJobHandler>();
         services.AddSingleton<ITranscriptionResultPublisher, EasyNetQResultPublisher>();
 
-        // Order matters: the model loads (StartingAsync) before the consumer starts taking jobs.
+        // The consumer waits for ModelReadiness, so jobs are only taken once the model is loaded.
         services.AddHostedService<ModelInitializationService>();
         services.AddHostedService<TranscriptionRequestConsumer>();
 

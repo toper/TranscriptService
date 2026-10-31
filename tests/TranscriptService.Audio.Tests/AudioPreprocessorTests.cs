@@ -50,6 +50,19 @@ public sealed class AudioPreprocessorTests : IDisposable
     }
 
     [Fact]
+    public async Task Load_TruncatedRecording_UsesTheCompleteFramesThatArePresent()
+    {
+        // Recorder crashed: the header promises 1 s of stereo, the file ends mid-frame after ~0.5 s.
+        var complete = WavFixtures.Stereo(left: 0.25f, right: 0.25f, frames: 16000, sampleRate: 16000);
+        var truncated = complete[..(44 + (8000 * 4) + 3)];
+
+        var audio = await LoadAsync(truncated);
+
+        audio.Samples.Length.Should().Be(8000);
+        audio.Samples.Should().OnlyContain(sample => Math.Abs(sample - 0.25f) < 0.001f);
+    }
+
+    [Fact]
     public async Task Load_UnsupportedFormat_Throws()
     {
         var path = Temp(WavFixtures.IeeeFloat(new float[800], 8000));

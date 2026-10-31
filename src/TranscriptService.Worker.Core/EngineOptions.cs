@@ -22,8 +22,4 @@ public class EngineOptions
     public string ModelPath { get; set; } = string.Empty;
 
     public ComputeDevice Device { get; set; } = ComputeDevice.Cpu;
-
-    /// <summary>Messages fetched from the broker ahead of processing; 1 keeps a single GPU job at a time.</summary>
-    [Range(1, 16)]
-    public int MaxConcurrency { get; set; } = 1;
 }

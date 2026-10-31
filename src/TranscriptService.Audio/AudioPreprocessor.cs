@@ -16,21 +16,34 @@ public static class AudioPreprocessor
     public const int TargetSampleRate = 16_000;
 
     /// <summary>Loads the WAV file at <paramref name="path"/> as 16 kHz mono samples.</summary>
+    /// <remarks>
+    /// Only the complete frames actually present are used: recordings cut short by a crashed
+    /// recorder declare more data than the file holds, and may end in the middle of a frame.
+    /// </remarks>
     /// <exception cref="UnsupportedAudioException">The file is not a supported WAV recording.</exception>
     public static async Task<AudioSamples> LoadAsync(string path, CancellationToken cancellationToken)
     {
-        var bytes = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
-        using var reader = AudioInspector.OpenReader(new MemoryStream(bytes, writable: false));
-        var format = AudioInspector.Describe(reader);
+        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1 << 16, FileOptions.Asynchronous);
+        await using (file.ConfigureAwait(false))
+        {
+            // The reader parses the header and leaves the stream at the start of the data chunk.
+            using var reader = AudioInspector.OpenReader(file);
+            var format = AudioInspector.Describe(reader);
 
-        var data = new byte[reader.Length];
-        reader.ReadExactly(data);
+            var data = new byte[Math.Min(reader.Length, file.Length - file.Position)];
+            var filled = await file.ReadAtLeastAsync(data, data.Length, throwOnEndOfStream: false, cancellationToken).ConfigureAwait(false);
+            var completeFrames = filled - (filled % reader.WaveFormat.BlockAlign);
+            if (completeFrames == 0)
+            {
+                throw new UnsupportedAudioException("The recording is empty.");
+            }
 
-        var mono = Downmix(Decode(data, format.Encoding), format.Channels);
-        return new AudioSamples(Resample(mono, format.SampleRate), TargetSampleRate);
+            var mono = Downmix(Decode(data.AsSpan(0, completeFrames), format.Encoding), format.Channels);
+            return new AudioSamples(Resample(mono, format.SampleRate), TargetSampleRate);
+        }
     }
 
-    private static float[] Decode(byte[] data, AudioEncoding encoding)
+    private static float[] Decode(ReadOnlySpan<byte> data, AudioEncoding encoding)
     {
         const float Scale = 1f / 32768f;
         if (encoding == AudioEncoding.Pcm16)
@@ -48,7 +61,13 @@ public static class AudioPreprocessor
         Func<byte, short> decode = encoding == AudioEncoding.MuLaw
             ? MuLawDecoder.MuLawToLinearSample
             : ALawDecoder.ALawToLinearSample;
-        return Array.ConvertAll(data, b => decode(b) * Scale);
+        var decoded = new float[data.Length];
+        for (var i = 0; i < data.Length; i++)
+        {
+            decoded[i] = decode(data[i]) * Scale;
+        }
+
+        return decoded;
     }
 
     private static float[] Downmix(float[] interleaved, int channels)

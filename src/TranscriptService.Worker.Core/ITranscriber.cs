@@ -15,6 +15,6 @@ public interface ITranscriber : IAsyncDisposable
     Task InitializeAsync(CancellationToken cancellationToken);
 
     /// <summary>Transcribes 16 kHz mono samples.</summary>
-    /// <exception cref="NotSupportedException">The engine cannot handle the requested language.</exception>
+    /// <exception cref="TranscriptionRejectedException">The engine cannot serve the request, e.g. its language.</exception>
     Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken);
 }

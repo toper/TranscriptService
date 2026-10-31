@@ -39,7 +39,8 @@ public static class ServiceDefaultsExtensions
                 },
             }));
         builder.Logging.ClearProviders();
-        builder.Host.UseNLog();
+        // Keep Microsoft.Extensions.Logging filters, so levels are set in the Logging section as usual.
+        builder.Host.UseNLog(new NLogAspNetCoreOptions { RemoveLoggerFactoryFilter = false });
 
         builder.Services.AddHealthChecks();
         return builder;

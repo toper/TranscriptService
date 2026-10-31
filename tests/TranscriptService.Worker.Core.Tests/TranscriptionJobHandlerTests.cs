@@ -75,13 +75,34 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
     }
 
     [Fact]
-    public async Task Handle_LanguageNotSupportedByEngine_PublishesFailedWithReason()
+    public async Task Handle_EngineRejectsRequest_PublishesFailedWithReason()
     {
-        _transcriber.Throw = new NotSupportedException("The deployed Vosk model recognizes 'pl' only; requested 'en'.");
+        _transcriber.Throw = new TranscriptionRejectedException("The deployed Vosk model recognizes 'pl' only; requested 'en'.");
 
         await _handler.HandleAsync(Command(_oneSecondAt8kHz), TestContext.Current.CancellationToken);
 
         _publisher.Failed.Should().ContainSingle().Which.Reason.Should().Be(_transcriber.Throw.Message);
+    }
+
+    [Fact]
+    public async Task Handle_LibraryThrowsNotSupported_PublishesGenericReason()
+    {
+        _transcriber.Throw = new NotSupportedException("Specified method is not supported.");
+
+        await _handler.HandleAsync(Command(_oneSecondAt8kHz), TestContext.Current.CancellationToken);
+
+        _publisher.Failed.Should().ContainSingle().Which.Reason.Should().NotContain("Specified method");
+    }
+
+    [Fact]
+    public async Task Handle_PublishingCompletedFails_PropagatesWithoutReportingEngineFailure()
+    {
+        _publisher.FailCompleted = new InvalidOperationException("Broker unreachable");
+
+        await FluentActions.Awaiting(() => _handler.HandleAsync(Command(_oneSecondAt8kHz), TestContext.Current.CancellationToken))
+            .Should().ThrowAsync<InvalidOperationException>();
+
+        _publisher.Failed.Should().BeEmpty("the transcription succeeded; the broker redelivers the job instead");
     }
 
     [Fact]
@@ -168,8 +189,15 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
 
         public List<TranscriptionFailed> Failed { get; } = [];
 
+        public Exception? FailCompleted { get; set; }
+
         public Task PublishAsync(TranscriptionCompleted message, CancellationToken cancellationToken)
         {
+            if (FailCompleted is not null)
+            {
+                return Task.FromException(FailCompleted);
+            }
+
             Completed.Add(message);
             return Task.CompletedTask;
         }
