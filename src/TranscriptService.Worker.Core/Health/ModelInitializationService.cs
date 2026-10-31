@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using TranscriptService.Audio;
 
 namespace TranscriptService.Worker.Core.Health;
@@ -9,23 +10,36 @@ namespace TranscriptService.Worker.Core.Health;
 /// Loads the model in the background, so the health endpoints answer during a long warm-up
 /// (<c>/health/live</c> OK, <c>/health/ready</c> not yet). A load failure stops the host with a
 /// non-zero exit code: a worker with a missing model or unavailable CUDA must not keep running.
-/// Before reporting ready it transcribes one second of silence: the first run on a GPU pays
-/// one-time kernel and library initialisation (measured: 18 s with FasterWhisper on CUDA), which
-/// belongs to the worker's start, not to the first client's job.
+/// On CUDA it transcribes one second of silence before reporting ready: the first run on a GPU pays
+/// one-time kernel and library initialisation (measured: 18 s with FasterWhisper), which belongs to
+/// the worker's start, not to the first client's job. On CPU there is nothing to absorb.
 /// </summary>
 public sealed partial class ModelInitializationService(
     ITranscriber transcriber,
     ModelReadiness readiness,
+    IOptions<EngineOptions> options,
     IHostApplicationLifetime lifetime,
     ILogger<ModelInitializationService> logger) : BackgroundService
 {
+    /// <summary>The deployment's usual languages; any supported one would do, these just match real traffic.</summary>
+    private static readonly string[] WarmUpLanguages = ["pl", "en"];
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
             LogLoading(transcriber.EngineName);
             await transcriber.InitializeAsync(stoppingToken).ConfigureAwait(false);
-            await WarmUpAsync(stoppingToken).ConfigureAwait(false);
+            if (transcriber.SupportedLanguages.Count == 0)
+            {
+                throw new InvalidOperationException("The engine loaded a model but reports no supported languages.");
+            }
+
+            if (options.Value.Device == ComputeDevice.Cuda)
+            {
+                await WarmUpAsync(stoppingToken).ConfigureAwait(false);
+            }
+
             readiness.MarkReady();
             LogLoaded(transcriber.EngineName);
         }
@@ -47,7 +61,8 @@ public sealed partial class ModelInitializationService(
     {
         var started = Stopwatch.GetTimestamp();
         var silence = new AudioSamples(new float[AudioPreprocessor.TargetSampleRate], AudioPreprocessor.TargetSampleRate);
-        var language = transcriber.SupportedLanguages.Order(StringComparer.Ordinal).First();
+        var language = WarmUpLanguages.FirstOrDefault(transcriber.SupportedLanguages.Contains)
+            ?? transcriber.SupportedLanguages.Order(StringComparer.Ordinal).First();
         await transcriber.TranscribeAsync(silence, language, cancellationToken).ConfigureAwait(false);
         var elapsed = Stopwatch.GetElapsedTime(started);
         LogWarmedUp(transcriber.EngineName, elapsed);

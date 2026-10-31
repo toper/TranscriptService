@@ -16,6 +16,9 @@ public sealed partial class WhisperNetTranscriber(
     IOptions<WhisperNetOptions> options,
     ILogger<WhisperNetTranscriber> logger) : ITranscriber
 {
+    private static readonly TimeSpan DisposeWait = TimeSpan.FromSeconds(30);
+
+    private readonly InFlightTracker _inFlight = new();
     private WhisperFactory? _factory;
 
     public string EngineName => "whispernet";
@@ -51,6 +54,7 @@ public sealed partial class WhisperNetTranscriber(
         ArgumentNullException.ThrowIfNull(audio);
         var factory = _factory ?? throw new InvalidOperationException("The model is not loaded.");
 
+        using var running = _inFlight.Enter();
         var processor = factory.CreateBuilder()
             .WithLanguage(language)
             .WithThreads(options.Value.Threads)
@@ -67,11 +71,15 @@ public sealed partial class WhisperNetTranscriber(
         }
     }
 
-    public ValueTask DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
-        _factory?.Dispose();
+        // Native decoding cannot be interrupted; freeing the model under it would crash the process.
+        if (await _inFlight.WaitIdleAsync(DisposeWait).ConfigureAwait(false))
+        {
+            _factory?.Dispose();
+        }
+
         _factory = null;
-        return ValueTask.CompletedTask;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Loaded GGML model {ModelPath} on the {Runtime} runtime")]

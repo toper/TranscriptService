@@ -73,7 +73,7 @@ services:
     build:
       <<: *worker-build
       args:
-        WORKER: WhisperNet
+        WORKER: whispernet
     environment:
       ConnectionStrings__RabbitMq: host=rabbitmq
       Engine__ModelPath: /models/${WHISPERNET_MODEL:-whispernet/ggml-large-v3-turbo-q5_0.bin}
@@ -96,7 +96,7 @@ services:
     build:
       <<: *worker-build
       args:
-        WORKER: FasterWhisper
+        WORKER: fasterwhisper
     environment:
       ConnectionStrings__RabbitMq: host=rabbitmq
       Engine__ModelPath: /models/${FASTERWHISPER_MODEL:-fasterwhisper/large-v3-turbo}

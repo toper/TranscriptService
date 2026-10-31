@@ -22,7 +22,3 @@ services:
     image: transcriptservice-fasterwhisper:cuda
     build:
       target: runtime-cuda
-      args:
-        # FasterWhisper.NET's GPU build links CUDA 12 and cuDNN 8 (kernels up to sm_120).
-        CUDA_IMAGE: nvidia/cuda:12.8.1-runtime-ubuntu22.04
-        CUDA_PACKAGES: libcudnn8

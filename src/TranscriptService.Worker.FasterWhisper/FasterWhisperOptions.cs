@@ -7,8 +7,9 @@ namespace TranscriptService.Worker.FasterWhisper;
 public sealed class FasterWhisperOptions : EngineOptions
 {
     /// <summary>
-    /// CTranslate2 compute type. Empty picks <c>float16</c> on CUDA and <c>float32</c> on CPU;
-    /// the CPU build of CTranslate2 shipped with FasterWhisper.NET has no efficient <c>int8</c>.
+    /// CTranslate2 compute type. Empty picks <c>default</c> on CUDA (the model's own precision, converted
+    /// when the GPU lacks it, e.g. no fast float16 on Pascal) and <c>float32</c> on CPU, because the CPU
+    /// build shipped with FasterWhisper.NET 1.0.8 rejects <c>int8</c> (measured).
     /// </summary>
     public string? ComputeType { get; set; }
 
@@ -27,6 +28,6 @@ public sealed class FasterWhisperOptions : EngineOptions
     public bool VadEnabled { get; set; }
 
     public string EffectiveComputeType => string.IsNullOrWhiteSpace(ComputeType)
-        ? Device == ComputeDevice.Cuda ? "float16" : "float32"
+        ? Device == ComputeDevice.Cuda ? "default" : "float32"
         : ComputeType;
 }

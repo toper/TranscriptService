@@ -18,11 +18,21 @@ public sealed class TranscriptionOutputTests
     }
 
     [Fact]
-    public void FromSegments_LastSegmentEndingWithinTimestampPrecision_IsKept()
+    public void FromSegments_SegmentMostlyAfterTheRecording_IsDropped()
     {
-        var output = TranscriptionOutput.FromSegments([Segment("Dzień dobry.", 0, 3.4)], TimeSpan.FromSeconds(3.32));
+        var output = TranscriptionOutput.FromSegments(
+            [Segment("Ile kosztuje paleta do Litwy?", 0, 3.6), Segment("Dziękuję.", 3.6, 4.6)],
+            TimeSpan.FromSeconds(3.72));
 
-        output.Segments.Should().ContainSingle();
+        output.FullText.Should().Be("Ile kosztuje paleta do Litwy?");
+    }
+
+    [Fact]
+    public void FromSegments_CallCutMidSentence_KeepsTheSentence_WithEndClampedToTheRecording()
+    {
+        var output = TranscriptionOutput.FromSegments([Segment("Dzień dobry, dzwonię w sprawie paczki", 0, 3.6)], TimeSpan.FromSeconds(3.3));
+
+        output.Segments.Should().ContainSingle().Which.End.Should().Be(TimeSpan.FromSeconds(3.3));
     }
 
     [Fact]

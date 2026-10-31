@@ -13,6 +13,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TranscriptService.Engines.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
   </ItemGroup>
 

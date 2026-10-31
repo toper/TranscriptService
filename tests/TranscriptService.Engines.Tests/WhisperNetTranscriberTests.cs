@@ -24,7 +24,7 @@ public sealed class WhisperNetTranscriberTests
             // The sample is synthetic speech (eSpeak NG); these words survive 8 kHz μ-law reliably.
             output.FullText.Should().ContainEquivalentOf("Konarskiego").And.ContainEquivalentOf("przepraszamy");
             output.Segments.Should().NotBeEmpty().And.BeInAscendingOrder(segment => segment.Start);
-            output.Segments.Should().OnlyContain(segment => segment.End > segment.Start && segment.End <= audio.Duration + TimeSpan.FromSeconds(1));
+            output.Segments.Should().OnlyContain(segment => segment.End > segment.Start && segment.End <= audio.Duration);
         }
         finally
         {

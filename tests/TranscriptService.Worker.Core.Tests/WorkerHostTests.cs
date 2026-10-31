@@ -44,9 +44,9 @@ public sealed class WorkerHostTests
     }
 
     [Fact]
-    public async Task Initialization_WarmsUpTheEngine_BeforeReportingReady()
+    public async Task Initialization_OnCuda_WarmsUpTheEngine_BeforeReportingReady()
     {
-        await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin" });
+        await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin", ["Engine:Device"] = "Cuda" });
         var transcriber = (SlowTranscriber)app.Services.GetRequiredService<ITranscriber>();
         transcriber.FinishLoading();
 
@@ -55,6 +55,20 @@ public sealed class WorkerHostTests
 
         transcriber.Transcribed.Should().ContainSingle("one warm-up run absorbs one-time GPU initialisation")
             .Which.Language.Should().Be("pl");
+        await app.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Initialization_OnCpu_SkipsWarmUp()
+    {
+        await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin", ["Engine:Device"] = "Cpu" });
+        var transcriber = (SlowTranscriber)app.Services.GetRequiredService<ITranscriber>();
+        transcriber.FinishLoading();
+
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        await app.Services.GetRequiredService<ModelReadiness>().WaitAsync(TestContext.Current.CancellationToken).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+
+        transcriber.Transcribed.Should().BeEmpty("on CPU there is no one-time GPU initialisation to absorb");
         await app.StopAsync(TestContext.Current.CancellationToken);
     }
 
@@ -103,7 +117,7 @@ public sealed class WorkerHostTests
 
         public string EngineName => "slow";
 
-        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl" };
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "af", "en", "pl" };
 
         public void FinishLoading() => _loaded.TrySetResult();
 
