@@ -12,4 +12,6 @@ public sealed class PendingCallbacks
 
     public IAsyncEnumerable<Guid> ReadAllAsync(CancellationToken cancellationToken) =>
         _jobs.Reader.ReadAllAsync(cancellationToken);
+
+    public bool TryDequeue(out Guid jobId) => _jobs.Reader.TryRead(out jobId);
 }

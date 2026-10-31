@@ -21,24 +21,16 @@ public sealed partial class TranscriptionResultHandler(
     public Task HandleAsync(TranscriptionCompleted message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return FinishAsync(message.JobId, message.Engine, job =>
-        {
-            job.Status = JobStatus.Completed;
-            job.FullText = message.FullText;
-            job.Segments = message.Segments;
-            job.AudioDuration = message.AudioDuration;
-            job.ProcessingTime = message.ProcessingTime;
-            job.FinishedAt = time.GetUtcNow();
-        }, cancellationToken);
+        return FinishAsync(message.JobId, job => job.Complete(message, time.GetUtcNow()), cancellationToken);
     }
 
     public Task HandleAsync(TranscriptionFailed message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return FinishAsync(message.JobId, message.Engine, job => job.Fail(message.Reason, time.GetUtcNow()), cancellationToken);
+        return FinishAsync(message.JobId, job => job.Fail(message.Reason, time.GetUtcNow(), message.Engine), cancellationToken);
     }
 
-    private async Task FinishAsync(Guid jobId, string engine, Action<TranscriptionJob> apply, CancellationToken cancellationToken)
+    private async Task FinishAsync(Guid jobId, Action<TranscriptionJob> finish, CancellationToken cancellationToken)
     {
         var job = await db.Jobs.FindAsync([jobId], cancellationToken).ConfigureAwait(false);
         if (job is null || job.Status != JobStatus.Queued)
@@ -47,8 +39,7 @@ public sealed partial class TranscriptionResultHandler(
             return;
         }
 
-        apply(job);
-        job.Engine = engine;
+        finish(job);
         try
         {
             await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

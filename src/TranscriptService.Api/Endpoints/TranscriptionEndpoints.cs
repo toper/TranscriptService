@@ -4,19 +4,15 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TranscriptService.Api.Jobs;
-using TranscriptService.Api.Messaging;
 using TranscriptService.Api.Options;
 using TranscriptService.Audio;
 using TranscriptService.Contracts.Http;
-using TranscriptService.Contracts.Messages;
 
 namespace TranscriptService.Api.Endpoints;
 
 /// <summary>Endpoints under <c>/api/v1/transcriptions</c>.</summary>
 internal static partial class TranscriptionEndpoints
 {
-    private const string DefaultLanguage = "pl";
-
     public static RouteGroupBuilder MapTranscriptionEndpoints(this RouteGroupBuilder api)
     {
         var transcriptions = api.MapGroup("/transcriptions").WithTags("Transcriptions");
@@ -55,33 +51,12 @@ internal static partial class TranscriptionEndpoints
         [FromForm] string? language,
         [FromForm] string? callbackUrl,
         IOptions<ApiOptions> options,
-        TranscriptionDbContext db,
-        AudioStorage storage,
-        ITranscriptionRequestPublisher publisher,
-        TimeProvider time,
+        TranscriptionSubmission submission,
         CancellationToken cancellationToken)
     {
         var settings = options.Value;
-        language ??= DefaultLanguage;
-
-        var errors = new Dictionary<string, string[]>();
-        if (audio is null || audio.Length == 0)
-        {
-            errors["audio"] = ["A WAV recording is required."];
-        }
-
-        if (!LanguageCode().IsMatch(language))
-        {
-            errors["language"] = ["Use a two-letter lowercase language code, e.g. 'pl'."];
-        }
-
-        Uri? callback = null;
-        if (callbackUrl is not null && (!Uri.TryCreate(callbackUrl, UriKind.Absolute, out callback) || (callback.Scheme != Uri.UriSchemeHttp && callback.Scheme != Uri.UriSchemeHttps)))
-        {
-            errors["callbackUrl"] = ["Use an absolute http or https URL."];
-        }
-
-        if (errors.Count > 0)
+        language ??= settings.DefaultLanguage;
+        if (ValidateForm(audio, language, callbackUrl, out var callback) is { } errors)
         {
             return TypedResults.ValidationProblem(errors);
         }
@@ -97,8 +72,8 @@ internal static partial class TranscriptionEndpoints
         AudioFormatInfo format;
         try
         {
-            using var stream = audio.OpenReadStream();
-            format = AudioInspector.Inspect(stream);
+            using var header = audio.OpenReadStream();
+            format = AudioInspector.Inspect(header);
         }
         catch (UnsupportedAudioException ex)
         {
@@ -108,61 +83,39 @@ internal static partial class TranscriptionEndpoints
         if (format.Duration > settings.MaxAudioDuration)
         {
             return TypedResults.Problem(
-                $"The recording lasts {format.Duration:hh\\:mm\\:ss}; the limit is {settings.MaxAudioDuration:hh\\:mm\\:ss}.",
+                $"The recording lasts {format.Duration:c}; the limit is {settings.MaxAudioDuration:c}.",
                 statusCode: StatusCodes.Status400BadRequest,
                 title: "Recording too long");
         }
 
-        var jobId = Guid.CreateVersion7();
-        var job = new TranscriptionJob
-        {
-            Id = jobId,
-            Status = JobStatus.Queued,
-            Language = language,
-            AudioPath = storage.PathFor(jobId),
-            AudioDuration = format.Duration,
-            CallbackUrl = callback,
-            CreatedAt = time.GetUtcNow(),
-        };
+        using var recording = audio.OpenReadStream();
+        var job = await submission.SubmitAsync(recording, format, language, callback, cancellationToken).ConfigureAwait(false);
+        return job is null
+            ? TypedResults.Problem("The transcription queue is unavailable. Retry later.", statusCode: StatusCodes.Status503ServiceUnavailable, title: "Queue unavailable")
+            : TypedResults.Accepted($"/api/v1/transcriptions/{job.Id}", job.ToResponse());
+    }
 
-        // Nothing may outlive a failed or aborted request: no recording without a job, no job without a queued request.
-        try
+    /// <returns>Validation errors keyed by form field, or <see langword="null"/> when the form is valid.</returns>
+    private static Dictionary<string, string[]>? ValidateForm(IFormFile? audio, string language, string? callbackUrl, out Uri? callback)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (audio is null || audio.Length == 0)
         {
-            using var stream = audio.OpenReadStream();
-            await storage.SaveAsync(jobId, stream, cancellationToken).ConfigureAwait(false);
-            db.Jobs.Add(job);
-            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch
-        {
-            storage.Delete(job.AudioPath);
-            throw;
+            errors["audio"] = ["A WAV recording is required."];
         }
 
-        try
+        if (!LanguageCode().IsMatch(language))
         {
-            var command = new TranscribeAudio(jobId, job.AudioPath, language, format.Duration);
-            await publisher.PublishAsync(command, MessagePriority.For(format.Duration, settings.HighPriorityThreshold), cancellationToken).ConfigureAwait(false);
-        }
-#pragma warning disable CA1031 // Any publishing failure means the job cannot run; undo it and tell the client to retry.
-        catch (Exception)
-#pragma warning restore CA1031
-        {
-            db.Jobs.Remove(job);
-            await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
-            storage.Delete(job.AudioPath);
-            if (cancellationToken.IsCancellationRequested)
-            {
-                throw;
-            }
-
-            return TypedResults.Problem(
-                "The transcription queue is unavailable. Retry later.",
-                statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Queue unavailable");
+            errors["language"] = ["Use a two-letter lowercase language code, e.g. 'pl'."];
         }
 
-        return TypedResults.Accepted($"/api/v1/transcriptions/{jobId}", job.ToResponse());
+        callback = null;
+        if (callbackUrl is not null && (!Uri.TryCreate(callbackUrl, UriKind.Absolute, out callback) || (callback.Scheme != Uri.UriSchemeHttp && callback.Scheme != Uri.UriSchemeHttps)))
+        {
+            errors["callbackUrl"] = ["Use an absolute http or https URL."];
+        }
+
+        return errors.Count > 0 ? errors : null;
     }
 
     private static async Task<Results<Ok<TranscriptionResponse>, NotFound>> GetAsync(
@@ -180,15 +133,13 @@ internal static partial class TranscriptionEndpoints
         AudioStorage storage,
         CancellationToken cancellationToken)
     {
-        var job = await db.Jobs.FindAsync([id], cancellationToken).ConfigureAwait(false);
-        if (job is null)
+        var deleted = await db.Jobs.Where(j => j.Id == id).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+        if (deleted == 0)
         {
             return TypedResults.NotFound();
         }
 
-        db.Jobs.Remove(job);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-        storage.Delete(job.AudioPath);
+        storage.Delete(storage.PathFor(id));
         return TypedResults.NoContent();
     }
 

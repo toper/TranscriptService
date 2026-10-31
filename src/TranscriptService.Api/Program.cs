@@ -1,16 +1,6 @@
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Http.Resilience;
-using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
-using TranscriptService.Api.Callbacks;
+using TranscriptService.Api;
 using TranscriptService.Api.Endpoints;
-using TranscriptService.Api.Jobs;
-using TranscriptService.Api.Messaging;
-using TranscriptService.Api.OpenApi;
-using TranscriptService.Api.Options;
-using TranscriptService.Api.Retention;
 using TranscriptService.Api.Security;
 using TranscriptService.ServiceDefaults;
 
@@ -22,52 +12,15 @@ if (await HealthProbe.TryRunAsync(args).ConfigureAwait(false) is { } probeExitCo
 var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults().AddMessaging();
 
-builder.Services.AddOptions<ApiOptions>()
-    .BindConfiguration(ApiOptions.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-builder.Services.AddProblemDetails();
-
-// The endpoint enforces the exact recording limit with a 413 problem response; the transport
-// limits only add headroom for multipart framing and form fields.
-var maxRequestBytes = (builder.Configuration.GetValue<long?>("Api:MaxUploadBytes") ?? new ApiOptions().MaxUploadBytes) + (1024 * 1024);
-builder.WebHost.ConfigureKestrel(kestrel => kestrel.Limits.MaxRequestBodySize = maxRequestBytes);
-builder.Services.Configure<FormOptions>(form => form.MultipartBodyLengthLimit = maxRequestBytes);
-builder.Services.AddAuthentication(ApiKeyAuthenticationHandler.SchemeName)
-    .AddScheme<AuthenticationSchemeOptions, ApiKeyAuthenticationHandler>(ApiKeyAuthenticationHandler.SchemeName, configureOptions: null);
-builder.Services.AddAuthorization();
-builder.Services.AddOpenApi("v1", options =>
-{
-    options.AddDocumentTransformer((document, _, _) =>
-    {
-        document.Info.Title = "TranscriptService API";
-        document.Info.Description = "Asynchronous transcription of telephone recordings: WAV with PCM 16-bit or G.711 μ-law/A-law samples, any sample rate (8 kHz telephony included), mono or stereo.";
-        return Task.CompletedTask;
-    });
-    options.AddDocumentTransformer<ApiKeySecuritySchemeTransformer>();
-});
-
-builder.Services.AddDbContext<TranscriptionDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("Jobs")
-        ?? throw new InvalidOperationException("Connection string 'Jobs' is not configured.")));
-builder.Services.AddHostedService<DatabaseMigrationService>();
-builder.Services.AddHealthChecks().AddDbContextCheck<TranscriptionDbContext>("database", tags: [ServiceDefaultsExtensions.ReadyTag]);
-builder.Services.AddSingleton<AudioStorage>();
-builder.Services.AddSingleton(TimeProvider.System);
-
-builder.Services.AddSingleton<ITranscriptionRequestPublisher, EasyNetQRequestPublisher>();
-builder.Services.AddScoped<TranscriptionResultHandler>();
-builder.Services.AddHostedService<TranscriptionResultSubscriber>();
-builder.Services.AddSingleton<PendingCallbacks>();
-builder.Services.AddHostedService<CallbackDispatcher>();
-builder.Services.AddScoped<RetentionCleaner>();
-builder.Services.AddHostedService<RetentionCleanupService>();
-builder.Services.AddHttpClient(CallbackDispatcher.HttpClientName)
-    .ConfigurePrimaryHttpMessageHandler(services =>
-        CallbackAddressGuard.CreateHandler(services.GetRequiredService<IOptions<ApiOptions>>().Value.AllowPrivateCallbackAddresses))
-    .AddStandardResilienceHandler(builder.Configuration.GetSection("CallbackDelivery"))
-    .SelectPipelineByAuthority(); // one failing receiver must not open the circuit for everyone
+builder.Services
+    .AddApiOptions()
+    .AddProblemDetails()
+    .AddApiKeyAuthentication()
+    .AddApiDocumentation()
+    .AddJobs(builder.Configuration)
+    .AddTranscriptionMessaging()
+    .AddCallbackDelivery(builder.Configuration)
+    .AddRetention();
 
 var app = builder.Build();
 

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TranscriptService.Api.Callbacks;
 using TranscriptService.Api.Jobs;
+using TranscriptService.Api.Tests.Support;
 using TranscriptService.Contracts.Callbacks;
 using TranscriptService.Contracts.Http;
 using WireMock.RequestBuilders;
@@ -12,8 +13,6 @@ namespace TranscriptService.Api.Tests.Callbacks;
 
 public sealed class CallbackDispatcherTests : IDisposable
 {
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
-
     private readonly WireMockServer _client = WireMockServer.Start();
     private readonly ApiTestFactory _factory = new();
 
@@ -162,34 +161,15 @@ public sealed class CallbackDispatcherTests : IDisposable
         return job;
     }
 
-    private async Task WaitUntilLoggedAsync(int requests)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        timeout.CancelAfter(Timeout);
-        while (_client.LogEntries.Count < requests)
-        {
-            await Task.Delay(20, timeout.Token);
-        }
-    }
+    private Task WaitUntilLoggedAsync(int requests) => Eventually.TrueAsync(() => _client.LogEntries.Count >= requests);
 
     private static ValueTask DispatchAsync(ApiTestFactory factory, Guid jobId) =>
         factory.Services.GetRequiredService<PendingCallbacks>().EnqueueAsync(jobId, TestContext.Current.CancellationToken);
 
-    private static async Task WaitUntilAsync(ApiTestFactory factory, Func<TranscriptionDbContext, Task<bool>> condition)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        timeout.CancelAfter(Timeout);
-        while (true)
+    private static Task WaitUntilAsync(ApiTestFactory factory, Func<TranscriptionDbContext, Task<bool>> condition) =>
+        Eventually.TrueAsync(async () =>
         {
-            await using (var scope = factory.Services.CreateAsyncScope())
-            {
-                if (await condition(scope.ServiceProvider.GetRequiredService<TranscriptionDbContext>()))
-                {
-                    return;
-                }
-            }
-
-            await Task.Delay(50, timeout.Token);
-        }
-    }
+            await using var scope = factory.Services.CreateAsyncScope();
+            return await condition(scope.ServiceProvider.GetRequiredService<TranscriptionDbContext>());
+        });
 }

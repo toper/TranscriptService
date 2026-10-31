@@ -1,11 +1,12 @@
 using EasyNetQ;
 using TranscriptService.Contracts.Messages;
+using TranscriptService.ServiceDefaults;
 
 namespace TranscriptService.Api.Messaging;
 
 /// <summary>
 /// Sends requests to the shared work queue consumed by whichever engine is deployed. The queue is
-/// declared here too, with the worker's exact arguments: messages sent to an undeclared queue are
+/// declared here too (<see cref="MessagingTopology"/>): messages sent to an undeclared queue are
 /// dropped by the broker, which would lose every request made while no worker has started yet.
 /// </summary>
 internal sealed class EasyNetQRequestPublisher(IBus bus) : ITranscriptionRequestPublisher, IDisposable
@@ -37,17 +38,7 @@ internal sealed class EasyNetQRequestPublisher(IBus bus) : ITranscriptionRequest
         {
             if (!_declared)
             {
-                var arguments = new Dictionary<string, object?>().WithMaxPriority(MessagePriority.Max);
-                await bus.Advanced.QueueDeclareAsync(
-                    QueueNames.TranscriptionRequests,
-                    configure =>
-                    {
-                        foreach (var (name, value) in arguments)
-                        {
-                            configure.WithArgument(name, value!);
-                        }
-                    },
-                    cancellationToken).ConfigureAwait(false);
+                await bus.Advanced.DeclareTranscriptionRequestsAsync(cancellationToken).ConfigureAwait(false);
                 _declared = true;
             }
         }

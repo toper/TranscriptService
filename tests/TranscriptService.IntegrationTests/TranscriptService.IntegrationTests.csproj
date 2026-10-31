@@ -8,6 +8,7 @@
 
   <ItemGroup>
     <Compile Include="..\TranscriptService.Audio.Tests\WavFixtures.cs" Link="WavFixtures.cs" />
+    <Compile Include="..\TranscriptService.Api.Tests\Support\Eventually.cs" Link="Eventually.cs" />
   </ItemGroup>
 
   <ItemGroup>

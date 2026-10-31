@@ -1,37 +1,35 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using TranscriptService.Api.Jobs;
-using TranscriptService.Api.Options;
+using TranscriptService.Api.Tests.Support;
 using TranscriptService.Contracts;
 using TranscriptService.Contracts.Http;
 
 namespace TranscriptService.Api.Tests.Jobs;
 
-public sealed class PersistenceTests : IDisposable
+public sealed class PersistenceTests : IAsyncLifetime
 {
-    private readonly string _storage = Directory.CreateTempSubdirectory("audio-storage-").FullName;
-    private readonly SqliteConnection _connection = new("Data Source=:memory:");
+    private SqliteJobStore _store = null!;
+
+    public async ValueTask InitializeAsync() => _store = await SqliteJobStore.CreateAsync();
 
     [Fact]
     public async Task Save_WritesFileNamedByJobId()
     {
-        var storage = Storage();
         var jobId = Guid.NewGuid();
 
-        var path = await storage.SaveAsync(jobId, new MemoryStream([1, 2, 3]), TestContext.Current.CancellationToken);
+        var path = await _store.Storage().SaveAsync(jobId, new MemoryStream([1, 2, 3]), TestContext.Current.CancellationToken);
 
-        path.Should().Be(Path.Combine(_storage, $"{jobId}.wav"));
+        path.Should().Be(Path.Combine(_store.StoragePath, $"{jobId}.wav"));
         (await File.ReadAllBytesAsync(path, TestContext.Current.CancellationToken)).Should().Equal(1, 2, 3);
     }
 
     [Fact]
     public void Delete_MissingFile_DoesNotThrow() =>
-        FluentActions.Invoking(() => Storage().Delete(Path.Combine(_storage, "missing.wav"))).Should().NotThrow();
+        FluentActions.Invoking(() => _store.Storage().Delete(Path.Combine(_store.StoragePath, "missing.wav"))).Should().NotThrow();
 
     [Fact]
     public async Task Job_WithSegmentsAndTimestamps_RoundTripsThroughSqlite()
     {
-        await _connection.OpenAsync(TestContext.Current.CancellationToken);
         var created = new DateTimeOffset(2026, 10, 31, 12, 0, 0, 123, TimeSpan.Zero);
         var job = new TranscriptionJob
         {
@@ -46,29 +44,18 @@ public sealed class PersistenceTests : IDisposable
             Segments = [new TranscriptSegment("dzień dobry", TimeSpan.Zero, TimeSpan.FromSeconds(1.2))],
         };
 
-        await using (var context = Context())
+        await using (var context = _store.Context())
         {
-            await context.Database.MigrateAsync(TestContext.Current.CancellationToken);
             context.Jobs.Add(job);
             await context.SaveChangesAsync(TestContext.Current.CancellationToken);
         }
 
-        await using (var context = Context())
+        await using (var context = _store.Context())
         {
             var stored = await context.Jobs.SingleAsync(j => j.FinishedAt > created, TestContext.Current.CancellationToken);
             stored.Should().BeEquivalentTo(job);
         }
     }
 
-    public void Dispose()
-    {
-        _connection.Dispose();
-        Directory.Delete(_storage, recursive: true);
-    }
-
-    private AudioStorage Storage() =>
-        new(Microsoft.Extensions.Options.Options.Create(new ApiOptions { StoragePath = _storage }));
-
-    private TranscriptionDbContext Context() =>
-        new(new DbContextOptionsBuilder<TranscriptionDbContext>().UseSqlite(_connection).Options);
+    public async ValueTask DisposeAsync() => await _store.DisposeAsync();
 }

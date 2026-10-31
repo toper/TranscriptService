@@ -35,5 +35,6 @@ public sealed class TranscriptionDbContext(DbContextOptions<TranscriptionDbConte
                 segments => segments.Aggregate(0, (hash, segment) => HashCode.Combine(hash, segment)),
                 segments => segments.ToList()));
         job.HasIndex(j => j.FinishedAt);
+        job.HasIndex(j => new { j.Status, j.CreatedAt });
     }
 }

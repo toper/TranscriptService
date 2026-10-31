@@ -17,6 +17,11 @@ public sealed class ApiOptions
     [MinLength(32)]
     public string CallbackSigningSecret { get; set; } = string.Empty;
 
+    /// <summary>Language assumed when a request does not name one.</summary>
+    [Required]
+    [RegularExpression("^[a-z]{2}$")]
+    public string DefaultLanguage { get; set; } = "pl";
+
     /// <summary>Directory on the volume shared with the engine workers.</summary>
     [Required]
     public string StoragePath { get; set; } = "/data/audio";

@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Testcontainers.RabbitMq;
 using TranscriptService.Audio;
+using TranscriptService.Api.Tests.Support;
 using TranscriptService.Audio.Tests;
 using TranscriptService.Contracts;
 using TranscriptService.Contracts.Callbacks;
@@ -85,8 +86,10 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
         CallbackSigner.Verify(callback.BodyAsBytes, callback.Headers![CallbackSigner.SignatureHeader].Single(), SigningSecret).Should().BeTrue();
         callback.Body.Should().Contain("\"status\":\"Completed\"").And.Contain(FakeTranscriber.Text).And.Contain("\"engine\":\"fake\"");
 
-        var afterDelivery = await client.GetAsync(new Uri($"/api/v1/transcriptions/{job!.Id}", UriKind.Relative), TestContext.Current.CancellationToken);
-        afterDelivery.StatusCode.Should().Be(HttpStatusCode.NotFound, "delivered results are deleted");
+        // Delivered results are deleted right after the receiver acknowledges them.
+        var jobUri = new Uri($"/api/v1/transcriptions/{job!.Id}", UriKind.Relative);
+        await Eventually.TrueAsync(async () =>
+            (await client.GetAsync(jobUri, TestContext.Current.CancellationToken)).StatusCode == HttpStatusCode.NotFound);
     }
 
     public async ValueTask DisposeAsync()
@@ -102,13 +105,7 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
 
     private async Task<WireMock.IRequestMessage> WaitForCallbackAsync()
     {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(30));
-        while (_callbackReceiver.LogEntries.Count == 0)
-        {
-            await Task.Delay(100, timeout.Token);
-        }
-
+        await Eventually.TrueAsync(() => _callbackReceiver.LogEntries.Count > 0);
         return _callbackReceiver.LogEntries.Single().RequestMessage!;
     }
 

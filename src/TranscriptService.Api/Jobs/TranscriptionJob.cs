@@ -1,5 +1,6 @@
 using TranscriptService.Contracts;
 using TranscriptService.Contracts.Http;
+using TranscriptService.Contracts.Messages;
 
 namespace TranscriptService.Api.Jobs;
 
@@ -32,11 +33,25 @@ public sealed class TranscriptionJob
 
     public TimeSpan? ProcessingTime { get; set; }
 
+    /// <summary>Records the transcript reported by an engine worker.</summary>
+    public void Complete(TranscriptionCompleted result, DateTimeOffset at)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        Status = JobStatus.Completed;
+        Engine = result.Engine;
+        FullText = result.FullText;
+        Segments = result.Segments;
+        AudioDuration = result.AudioDuration;
+        ProcessingTime = result.ProcessingTime;
+        FinishedAt = at;
+    }
+
     /// <summary>Ends the job without a transcript; the reason is shown to the client.</summary>
-    public void Fail(string reason, DateTimeOffset at)
+    public void Fail(string reason, DateTimeOffset at, string? engine = null)
     {
         Status = JobStatus.Failed;
         FailureReason = reason;
+        Engine = engine;
         FinishedAt = at;
     }
 }

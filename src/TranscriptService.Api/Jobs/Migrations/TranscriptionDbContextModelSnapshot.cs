@@ -70,6 +70,8 @@ namespace TranscriptService.Api.Jobs.Migrations
 
                     b.HasIndex("FinishedAt");
 
+                    b.HasIndex("Status", "CreatedAt");
+
                     b.ToTable("Jobs", (string)null);
                 });
 #pragma warning restore 612, 618
