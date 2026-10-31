@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using TranscriptService.Api.Callbacks;
 using TranscriptService.Api.Endpoints;
 using TranscriptService.Api.Jobs;
 using TranscriptService.Api.Messaging;
@@ -50,6 +51,9 @@ builder.Services.AddSingleton<AudioStorage>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddSingleton<ITranscriptionRequestPublisher, EasyNetQRequestPublisher>();
+builder.Services.AddScoped<TranscriptionResultHandler>();
+builder.Services.AddHostedService<TranscriptionResultSubscriber>();
+builder.Services.AddSingleton<PendingCallbacks>();
 
 var app = builder.Build();
 

@@ -51,6 +51,7 @@ public sealed class ApiTestFactory : WebApplicationFactory<Program>
         {
             services.RemoveAll<ITranscriptionRequestPublisher>();
             services.AddSingleton<ITranscriptionRequestPublisher>(Publisher);
+            services.Remove(services.Single(d => d.ImplementationType == typeof(TranscriptionResultSubscriber)));
         });
     }
 
