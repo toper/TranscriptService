@@ -11,6 +11,7 @@
   <ItemGroup>
     <ProjectReference Include="..\TranscriptService.Audio\TranscriptService.Audio.csproj" />
     <ProjectReference Include="..\TranscriptService.Contracts\TranscriptService.Contracts.csproj" />
+    <ProjectReference Include="..\TranscriptService.ServiceDefaults\TranscriptService.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/TranscriptService.Audio/TranscriptService.Audio.csproj" />
     <Project Path="src/TranscriptService.Contracts/TranscriptService.Contracts.csproj" />
+    <Project Path="src/TranscriptService.ServiceDefaults/TranscriptService.ServiceDefaults.csproj" />
     <Project Path="src/TranscriptService.Worker.Core/TranscriptService.Worker.Core.csproj" />
   </Folder>
   <Folder Name="/tests/">

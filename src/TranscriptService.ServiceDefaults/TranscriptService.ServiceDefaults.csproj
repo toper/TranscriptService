@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Cross-cutting defaults shared by every TranscriptService host: structured logging, health endpoints and RabbitMQ messaging.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="EasyNetQ" />
+    <PackageReference Include="NLog.Web.AspNetCore" />
+  </ItemGroup>
+
+</Project>
