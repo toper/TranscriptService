@@ -1,0 +1,18 @@
+# GPU override: CUDA images and one NVIDIA GPU per worker (requires the NVIDIA Container Toolkit).
+#   docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.gpu.yml --profile whispernet up --build
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+services:
+  worker-whispernet:
+    <<: *gpu
+    image: transcriptservice-whispernet:cuda
+    build:
+      target: runtime-cuda

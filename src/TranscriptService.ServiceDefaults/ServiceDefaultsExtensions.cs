@@ -2,6 +2,7 @@ using EasyNetQ;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NLog;
@@ -23,6 +24,18 @@ public static class ServiceDefaultsExtensions
     public static WebApplicationBuilder AddServiceDefaults(this WebApplicationBuilder builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
+
+        // Lowest-precedence defaults: per-request framework and broker chatter (including every
+        // health probe) stays out of the logs unless a host's configuration asks for it.
+        builder.Configuration.Sources.Insert(0, new MemoryConfigurationSource
+        {
+            InitialData = new Dictionary<string, string?>
+            {
+                ["Logging:LogLevel:Default"] = "Information",
+                ["Logging:LogLevel:Microsoft.AspNetCore"] = "Warning",
+                ["Logging:LogLevel:EasyNetQ"] = "Warning",
+            },
+        });
 
         LogManager.Setup().LoadConfiguration(config => config
             .ForLogger()

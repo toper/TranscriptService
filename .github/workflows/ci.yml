@@ -37,3 +37,38 @@ jobs:
         with:
           name: test-results
           path: '**/TestResults/*.trx'
+
+  docker:
+    # Every image must keep building; CUDA images are built but cannot run on hosted runners.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: api
+            dockerfile: src/TranscriptService.Api/Dockerfile
+            target: final
+          - name: whispernet-cpu
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cpu
+            worker: WhisperNet
+          - name: whispernet-cuda
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cuda
+            worker: WhisperNet
+    name: docker (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          build-args: WORKER=${{ matrix.worker }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.name }}
+          # CUDA layers are several GB; caching them would evict everything else from the 10 GB cache.
+          cache-to: ${{ matrix.target != 'runtime-cuda' && format('type=gha,mode=max,scope={0}', matrix.name) || '' }}

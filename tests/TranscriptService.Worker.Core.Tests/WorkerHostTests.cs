@@ -88,6 +88,8 @@ public sealed class WorkerHostTests
 
         public string EngineName => "slow";
 
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl" };
+
         public void FinishLoading() => _loaded.TrySetResult();
 
         public Task InitializeAsync(CancellationToken cancellationToken) => _loaded.Task.WaitAsync(cancellationToken);
@@ -101,6 +103,8 @@ public sealed class WorkerHostTests
     private sealed class FailingTranscriber(IOptions<EngineOptions> options) : ITranscriber
     {
         public string EngineName => "failing";
+
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl" };
 
         public Task InitializeAsync(CancellationToken cancellationToken) =>
             throw new FileNotFoundException("Model file not found.", options.Value.ModelPath);

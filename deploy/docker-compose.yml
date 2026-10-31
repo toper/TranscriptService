@@ -1,0 +1,89 @@
+# TranscriptService: API + RabbitMQ + one engine worker, chosen with a profile.
+#
+#   cp deploy/.env.example deploy/.env           # then set API_KEY and CALLBACK_SIGNING_SECRET
+#   docker compose -f deploy/docker-compose.yml --profile whispernet up --build
+#
+# GPU (NVIDIA Container Toolkit): add -f deploy/docker-compose.gpu.yml.
+
+name: transcriptservice
+
+x-worker: &worker
+  volumes:
+    - data:/data:ro
+    - models:/models:ro
+  restart: unless-stopped
+
+x-worker-build: &worker-build
+  context: ..
+  dockerfile: deploy/worker.Dockerfile
+  target: runtime-cpu
+
+x-models-init: &models-init
+  image: curlimages/curl:8.11.1
+  user: "0:0"
+  volumes:
+    - ./models:/scripts:ro
+    - models:/models
+
+services:
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    ports:
+      # Management UI for local inspection only: bound to loopback, as guest/guest is the login.
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-transcriptservice.conf:ro
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+    restart: unless-stopped
+
+  api:
+    image: transcriptservice-api
+    build:
+      context: ..
+      dockerfile: src/TranscriptService.Api/Dockerfile
+    ports:
+      - "8080:8080"     # http://localhost:8080/scalar/v1
+    environment:
+      ConnectionStrings__RabbitMq: host=rabbitmq
+      Api__ApiKey: ${API_KEY:?Set API_KEY in deploy/.env}
+      Api__CallbackSigningSecret: ${CALLBACK_SIGNING_SECRET:?Set CALLBACK_SIGNING_SECRET in deploy/.env}
+      Api__AllowPrivateCallbackAddresses: ${ALLOW_PRIVATE_CALLBACKS:-false}
+    volumes:
+      - data:/data
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---- Whisper.net (GGML) ------------------------------------------------------------------
+  models-init-whispernet:
+    <<: *models-init
+    profiles: [whispernet]
+    command: ["sh", "/scripts/fetch-models.sh", "whispernet", "/models"]
+
+  worker-whispernet:
+    <<: *worker
+    profiles: [whispernet]
+    image: transcriptservice-whispernet:cpu
+    build:
+      <<: *worker-build
+      args:
+        WORKER: WhisperNet
+    environment:
+      ConnectionStrings__RabbitMq: host=rabbitmq
+      Engine__ModelPath: /models/${WHISPERNET_MODEL:-whispernet/ggml-large-v3-turbo-q5_0.bin}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      models-init-whispernet:
+        condition: service_completed_successfully
+
+volumes:
+  data:       # recordings and the job database, owned by the API
+  models:     # speech models, fetched by models-init-* and mounted read-only by workers
+  rabbitmq-data:

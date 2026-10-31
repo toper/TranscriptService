@@ -75,6 +75,15 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
     }
 
     [Fact]
+    public async Task Handle_LanguageTheEngineDoesNotKnow_PublishesFailedWithoutTranscribing()
+    {
+        await _handler.HandleAsync(Command(_oneSecondAt8kHz) with { Language = "xx" }, TestContext.Current.CancellationToken);
+
+        _publisher.Failed.Should().ContainSingle().Which.Reason.Should().Contain("'xx'").And.Contain("en, pl");
+        _transcriber.Calls.Should().Be(0);
+    }
+
+    [Fact]
     public async Task Handle_EngineRejectsRequest_PublishesFailedWithReason()
     {
         _transcriber.Throw = new TranscriptionRejectedException("The deployed Vosk model recognizes 'pl' only; requested 'en'.");
@@ -150,10 +159,15 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
 
         public string EngineName => Name;
 
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl", "en" };
+
+        public int Calls { get; private set; }
+
         public Task InitializeAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
         {
+            Calls++;
             ReceivedSampleRate = audio.SampleRate;
             ReceivedLanguage = language;
             time.Advance(Takes);

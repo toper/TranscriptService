@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>Engine worker running Whisper.net (whisper.cpp, GGML models) on CPU or CUDA.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The CUDA image is published with -p:UseCuda=true; the CUDA runtime adds ~300 MB. -->
+    <UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Whisper.net" />
+    <PackageReference Include="Whisper.net.Runtime" />
+    <PackageReference Include="Whisper.net.Runtime.Cuda.Linux" Condition="'$(UseCuda)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
+  </ItemGroup>
+
+</Project>
