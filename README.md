@@ -30,8 +30,9 @@ flowchart LR
    Short recordings (≤ 30 s) are queued with high priority.
 2. One engine worker converts the audio to 16 kHz mono and transcribes it. The model is loaded once at
    startup and stays warm.
-3. The API stores the result and POSTs it to the client's `callbackUrl`, signed with HMAC-SHA256. After a
-   delivered callback the job and recording are deleted. Without a callback the result stays for 15 minutes.
+3. The API stores the result, deletes the recording and POSTs the result to the client's `callbackUrl`,
+   signed with HMAC-SHA256. A delivered job is deleted at once. Without a callback, or when delivery
+   still fails after retries, the result stays for 15 minutes.
 
 Decisions and trade-offs are recorded as ADRs:
 [EasyNetQ messaging](docs/adr/0001-messaging-with-easynetq.md) ·
@@ -58,7 +59,7 @@ volume and checks its SHA-256. The Whisper models are large, so the first start 
 |-----|------|
 | http://localhost:8080/scalar/v1 | API reference (Scalar) |
 | http://localhost:8081 | Microphone demo (with `--profile demo`) |
-| http://localhost:15672 | RabbitMQ management UI (published on localhost only) |
+| http://localhost:15672 | RabbitMQ management UI (guest/guest, published on localhost only) |
 
 On an NVIDIA GPU, add the GPU override:
 
@@ -72,8 +73,8 @@ To run the demo page, add its profile: `--profile whispernet --profile demo`.
 
 | Engine | Profile | CPU | GPU | Default model | Timed segments |
 |--------|---------|-----|-----|---------------|----------------|
-| [Whisper.net](https://github.com/sandrohanea/whisper.net) | `whispernet` | ✓ | CUDA 13 | `ggml-large-v3-turbo-q5_0` | phrases |
-| [FasterWhisper.NET](https://github.com/qourex/FasterWhisper.NET) | `fasterwhisper` | ✓ (slow) | CUDA 12 + cuDNN | `faster-whisper-large-v3-turbo` | phrases |
+| [Whisper.net](https://github.com/sandrohanea/whisper.net) | `whispernet` | ✓ | CUDA 13 (driver ≥ 580) | `ggml-large-v3-turbo-q5_0` | phrases |
+| [FasterWhisper.NET](https://github.com/qourex/FasterWhisper.NET) | `fasterwhisper` | ✓ (slow) | CUDA 12 + cuDNN 8 | `faster-whisper-large-v3-turbo` | phrases |
 | [Vosk](https://alphacephei.com/vosk/) | `vosk` | ✓ | – | `vosk-model-small-pl-0.22` | single words |
 
 Notes from testing on real 8 kHz call recordings:
@@ -128,9 +129,22 @@ curl -H "X-API-KEY: $API_KEY" http://localhost:8080/api/v1/transcriptions/01a194
 This is real output for the synthetic test recording `tests/TestData/sample.wav` (eSpeak voice), from the
 CPU image. Real voices are recognized more accurately, and a GPU is much faster.
 
-`DELETE /api/v1/transcriptions/{id}` removes a job and its recording early. Errors are returned as RFC 9457
-problem details:
-- `400`: not a supported WAV, empty, or too long (the limit is 30 minutes).
+A job's `status` is one of these:
+- `Queued`
+- `Completed`
+- `Failed`, with the reason in `failureReason`
+- `CallbackFailed`: the result is ready, but it could not be delivered to the callback URL.
+
+Failed jobs are also sent to the callback. A job still queued after 4 × the maximum audio duration fails
+with a timeout reason. `DELETE /api/v1/transcriptions/{id}` removes a job and its recording early and
+returns `204`.
+
+Errors are returned as RFC 9457 problem details:
+- `400`: the recording is not a supported WAV, is empty, or is too long (the limit is 30 minutes).
+  Also returned, with field errors, for a `language` that is not two lowercase letters or a
+  `callbackUrl` that is not an absolute http(s) URL.
+- `401`: the `X-API-KEY` header is missing or wrong.
+- `404`: no job has that id.
 - `413`: the upload is over 100 MB.
 - `503`: the queue is unavailable.
 
@@ -140,12 +154,18 @@ When a job finishes, the API POSTs the same JSON to the `callbackUrl`, with two 
 - `X-Transcription-Id`: the job id.
 - `X-Signature: sha256=<hex>`: an HMAC-SHA256 of the raw body, keyed with `CALLBACK_SIGNING_SECRET`.
 
-Failed deliveries are retried with backoff. Callbacks to private and loopback addresses are blocked unless
+Failed deliveries are retried with exponential backoff: 5 retries, for up to 3 minutes. This can be
+changed in the `CallbackDelivery` section. Callbacks to private and loopback addresses are blocked unless
 the host is on `Api__AllowedCallbackHosts` or `ALLOW_PRIVATE_CALLBACKS=true`.
 
 To verify a callback in ASP.NET Core:
 
 ```csharp
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using TranscriptService.Contracts.Http;
+
 var secret = app.Configuration["CallbackSigningSecret"]!;
 
 app.MapPost("/transcripts", async (HttpRequest request) =>
@@ -195,10 +215,10 @@ Other settings use standard .NET configuration and can be set as environment var
 | `Api__MaxUploadBytes` / `Api__MaxAudioDuration` | 100 MB / `00:30:00` | Upload limits |
 | `Api__ResultTtl` | `00:15:00` | How long a result stays without a callback |
 | `Api__HighPriorityThreshold` | `00:00:30` | Recordings up to this length jump the queue |
-| `Api__AllowedCallbackHosts__0` | – | Host allowed as a callback target even on a private network |
+| `Api__AllowedCallbackHosts__N` | `demo-web` (index 0, set in compose) | Hosts allowed as callback targets on a private network; add yours from index 1 |
 | `Engine__Device` | `Cpu` / `Cuda` | Set by the image target (`runtime-cpu` / `runtime-cuda`) |
 | `Engine__Threads` (Whisper.net), `Engine__CpuThreads` (FasterWhisper) | CPU cores, at most 8 | CPU threads |
-| `Engine__BeamSize`, `Engine__ComputeType`, `Engine__VadEnabled` | `1`, auto, `false` | FasterWhisper tuning |
+| `Engine__BeamSize`, `Engine__ComputeType`, `Engine__VadEnabled` | `1`, `default` (CUDA) / `float32` (CPU), `false` | FasterWhisper tuning |
 
 All services log JSON to stdout (NLog). Each one serves `/health/live` and `/health/ready`, and the
 images use these for their `HEALTHCHECK`.
