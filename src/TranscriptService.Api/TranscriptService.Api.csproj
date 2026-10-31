@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>Public HTTP API: accepts recordings, tracks transcription jobs and delivers results by callback.</Description>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- XML docs feed the OpenAPI document; undocumented internals are fine. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Audio\TranscriptService.Audio.csproj" />
+    <ProjectReference Include="..\TranscriptService.Contracts\TranscriptService.Contracts.csproj" />
+    <ProjectReference Include="..\TranscriptService.ServiceDefaults\TranscriptService.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TranscriptService.Api.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -10,4 +10,8 @@
     <PackageReference Include="NLog.Web.AspNetCore" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Contracts\TranscriptService.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>
