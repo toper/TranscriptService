@@ -64,6 +64,10 @@ jobs:
             dockerfile: deploy/worker.Dockerfile
             target: runtime-cuda
             worker: fasterwhisper
+          - name: vosk-cpu
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cpu
+            worker: vosk
     name: docker (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4

@@ -6,6 +6,7 @@
     <Project Path="src/TranscriptService.ServiceDefaults/TranscriptService.ServiceDefaults.csproj" />
     <Project Path="src/TranscriptService.Worker.Core/TranscriptService.Worker.Core.csproj" />
     <Project Path="src/TranscriptService.Worker.FasterWhisper/TranscriptService.Worker.FasterWhisper.csproj" />
+    <Project Path="src/TranscriptService.Worker.Vosk/TranscriptService.Worker.Vosk.csproj" />
     <Project Path="src/TranscriptService.Worker.WhisperNet/TranscriptService.Worker.WhisperNet.csproj" />
   </Folder>
   <Folder Name="/tests/">
