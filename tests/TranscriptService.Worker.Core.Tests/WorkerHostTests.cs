@@ -22,7 +22,14 @@ public sealed class WorkerHostTests
         var stopping = new TaskCompletionSource();
         app.Lifetime.ApplicationStopping.Register(() => stopping.TrySetResult());
 
-        await app.StartAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await app.StartAsync(TestContext.Current.CancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            // The load can fail while Kestrel is still binding; stopping then cancels the start itself.
+        }
 
         await stopping.Task.WaitAsync(Timeout, TestContext.Current.CancellationToken);
     }
