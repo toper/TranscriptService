@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Messages and HTTP contracts shared between TranscriptService services.</Description>
+  </PropertyGroup>
+
+</Project>
