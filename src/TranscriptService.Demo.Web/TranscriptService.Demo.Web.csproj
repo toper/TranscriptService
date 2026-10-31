@@ -4,9 +4,6 @@
     <Description>Demo of the TranscriptService API: live microphone transcription in Blazor, results pushed over SignalR.</Description>
     <InvariantGlobalization>true</InvariantGlobalization>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-    <!-- The SDK infers this from .razor files, which the Docker restore layer (project files only)
-         does not contain; without it blazor.web.js is missing from the published app. -->
-    <RequiresAspNetWebAssets>true</RequiresAspNetWebAssets>
   </PropertyGroup>
 
   <ItemGroup>

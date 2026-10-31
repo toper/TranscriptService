@@ -12,11 +12,6 @@ namespace TranscriptService.Demo.Web.Transcriptions;
 /// <summary>The demo backend: forwards recordings to the API and relays its callbacks to browsers.</summary>
 internal static class DemoEndpoints
 {
-    /// <summary>Upload limit for the demo; the API accepts more.</summary>
-    private const long MaxUploadBytes = 25 * 1024 * 1024;
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     public static IEndpointRouteBuilder MapDemoEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapHub<TranscriptionHub>(DemoRoutes.Hub);
@@ -24,7 +19,7 @@ internal static class DemoEndpoints
         // Same-origin calls from the demo page; the demo runs locally only (no antiforgery or auth).
         app.MapPost(DemoRoutes.Utterances, SubmitAsync)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(MaxUploadBytes));
+            .WithMetadata(new RequestSizeLimitAttribute(DemoRoutes.MaxUploadBytes));
 
         app.MapPost(DemoRoutes.Callbacks, ReceiveCallbackAsync);
         return app;
@@ -71,7 +66,7 @@ internal static class DemoEndpoints
 
         if (session is { } target)
         {
-            var transcription = JsonSerializer.Deserialize<TranscriptionResponse>(body, Json)!;
+            var transcription = JsonSerializer.Deserialize<TranscriptionResponse>(body, JsonSerializerOptions.Web)!;
             await hub.Clients.Group(target.ToString()).TranscriptionFinished(transcription).ConfigureAwait(false);
         }
 

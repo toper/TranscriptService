@@ -11,9 +11,11 @@ COPY --parents src/*/*.csproj ./
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     dotnet restore src/TranscriptService.Demo.Web/TranscriptService.Demo.Web.csproj
 COPY src/ src/
+# Publish restores once more (cheap with the cache): only with the .razor files present does the
+# SDK know the app needs the Blazor framework scripts.
 RUN --mount=type=cache,id=nuget,target=/root/.nuget/packages \
     dotnet publish src/TranscriptService.Demo.Web/TranscriptService.Demo.Web.csproj \
-        --configuration Release --no-restore --output /app /p:UseAppHost=false
+        --configuration Release --output /app /p:UseAppHost=false
 
 # Chiseled: no shell, no package manager, non-root by default.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS final

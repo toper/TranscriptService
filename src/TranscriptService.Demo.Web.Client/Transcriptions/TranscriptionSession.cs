@@ -3,7 +3,6 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
-using Microsoft.Extensions.DependencyInjection;
 using TranscriptService.Contracts.Http;
 
 namespace TranscriptService.Demo.Web.Client.Transcriptions;
@@ -26,13 +25,7 @@ public sealed class TranscriptionSession(HttpClient http, NavigationManager navi
             .AddJsonProtocol(json => json.PayloadSerializerOptions.TypeInfoResolverChain.Insert(0, DemoJsonContext.Default))
             .WithAutomaticReconnect()
             .Build();
-        hub.On<TranscriptionResponse>(nameof(ITranscriptionClient.TranscriptionFinished), async transcription =>
-        {
-            if (Finished is { } handler)
-            {
-                await handler(transcription).ConfigureAwait(false);
-            }
-        });
+        hub.On<TranscriptionResponse>(nameof(ITranscriptionClient.TranscriptionFinished), transcription => Finished?.Invoke(transcription) ?? Task.CompletedTask);
         // A reconnect brings a new connection id; joining again keeps the session's results coming.
         hub.Reconnected += _ => hub.InvokeAsync(DemoRoutes.JoinSession, _session);
 

@@ -55,8 +55,6 @@
 </ol>
 
 @code {
-    private const long MaxUploadBytes = 25 * 1024 * 1024;
-
     private readonly List<Utterance> _utterances = [];
 
     // A result can arrive over SignalR before the upload's HTTP response; it waits here for its row.
@@ -95,7 +93,7 @@
 
             _listening = !_listening;
         }
-        catch (Microsoft.JSInterop.JSException ex)
+        catch (JSException ex)
         {
             _error = $"Microphone unavailable: {ex.Message}";
         }
@@ -109,8 +107,8 @@
         _error = null;
         try
         {
-            await using var file = e.File.OpenReadStream(MaxUploadBytes);
-            var copy = new MemoryStream();
+            await using var file = e.File.OpenReadStream(DemoRoutes.MaxUploadBytes);
+            var copy = new MemoryStream((int)e.File.Size);
             await file.CopyToAsync(copy);
             copy.Position = 0;
             await SubmitAsync(copy, e.File.Name, $"📄 {e.File.Name}");

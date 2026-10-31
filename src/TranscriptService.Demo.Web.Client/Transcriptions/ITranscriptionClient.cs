@@ -24,4 +24,7 @@ public static class DemoRoutes
 
     /// <summary>Hub method a browser calls to receive the results of its session.</summary>
     public const string JoinSession = "JoinSession";
+
+    /// <summary>Upload limit for the demo; the API accepts more.</summary>
+    public const long MaxUploadBytes = 25 * 1024 * 1024;
 }

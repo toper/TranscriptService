@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
+using TranscriptService.Contracts.Http;
 using TranscriptService.Demo.Web.Components;
 using TranscriptService.Demo.Web.Transcriptions;
 using TranscriptService.ServiceDefaults;
@@ -20,7 +21,7 @@ builder.Services.AddHttpClient<TranscriptApiClient>((provider, http) =>
     {
         var api = provider.GetRequiredService<IOptions<TranscriptApiOptions>>().Value;
         http.BaseAddress = api.BaseUrl;
-        http.DefaultRequestHeaders.Add("X-API-KEY", api.ApiKey);
+        http.DefaultRequestHeaders.Add(ApiKeyHeader.Name, api.ApiKey);
     })
     // Retries only for safe methods: a re-sent upload would create a second transcription job.
     .AddStandardResilienceHandler(resilience => resilience.Retry.DisableForUnsafeHttpMethods());

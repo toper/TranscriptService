@@ -7,12 +7,26 @@ const SILENCE_MS = 700;         // this much silence after speech ends an uttera
 const MIN_SPEECH_MS = 300;      // shorter bursts (clicks, coughs) are dropped
 const MAX_UTTERANCE_MS = 15000; // long monologues are cut so text keeps flowing
 
-// Runs on the audio thread and forwards each 128-sample frame to the page.
+// Runs on the audio thread: collects 128-sample render quanta into ~40 ms blocks and transfers
+// each block to the page, instead of posting hundreds of tiny copies a second.
 const workletSource = `
+const BLOCK = 2048;
 class Capture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.block = new Float32Array(BLOCK);
+    this.length = 0;
+  }
   process(inputs) {
     const channel = inputs[0][0];
-    if (channel) this.port.postMessage(channel.slice(0));
+    if (!channel) return true;
+    this.block.set(channel, this.length);
+    this.length += channel.length;
+    if (this.length === BLOCK) {
+      this.port.postMessage(this.block, [this.block.buffer]);
+      this.block = new Float32Array(BLOCK);
+      this.length = 0;
+    }
     return true;
   }
 }

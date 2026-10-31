@@ -82,7 +82,7 @@ internal static class ApiServiceCollectionExtensions
             .ConfigurePrimaryHttpMessageHandler(provider =>
             {
                 var api = provider.GetRequiredService<IOptions<ApiOptions>>().Value;
-                return CallbackAddressGuard.CreateHandler(api.AllowPrivateCallbackAddresses, [.. api.AllowedCallbackHosts]);
+                return CallbackAddressGuard.CreateHandler(api.AllowPrivateCallbackAddresses, api.AllowedCallbackHosts);
             })
             .AddStandardResilienceHandler(configuration.GetSection("CallbackDelivery"))
             .SelectPipelineByAuthority();

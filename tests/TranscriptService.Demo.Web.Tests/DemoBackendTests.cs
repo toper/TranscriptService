@@ -47,7 +47,7 @@ public sealed class DemoBackendTests : IDisposable
     public async Task Utterance_SubmitsToTheApi_WithACallbackUrlCarryingTheSession()
     {
         var session = Guid.NewGuid();
-        _api.Given(Request.Create().WithPath("/api/v1/transcriptions").UsingPost().WithHeader("X-API-KEY", ApiKey))
+        _api.Given(Request.Create().WithPath("/api/v1/transcriptions").UsingPost().WithHeader(ApiKeyHeader.Name, ApiKey))
             .RespondWith(Response.Create().WithStatusCode(202).WithBodyAsJson(Job(Guid.NewGuid(), JobStatus.Queued)));
         using var client = _demo.CreateClient();
 
