@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Runtime.InteropServices;
 using NAudio.Codecs;
 using NAudio.Wave;
@@ -11,9 +12,21 @@ namespace TranscriptService.Audio;
 /// averaging and resampled with a windowed-sinc resampler, which — unlike linear
 /// interpolation — does not add spectral images into the band the models listen to.
 /// </summary>
+/// <remarks>
+/// Decoding is done here rather than with NAudio's format conversion streams because G.711
+/// conversion lives in the Windows-only NAudio packages; NAudio.Core supplies the codec tables.
+/// The file is streamed in chunks and decoded straight into one mono buffer, so a 30-minute
+/// call never exists in memory as raw bytes and interleaved floats at the same time.
+/// </remarks>
 public static class AudioPreprocessor
 {
     public const int TargetSampleRate = 16_000;
+
+    private const int ChunkFrames = 16_384;
+    private const float Pcm16Scale = 1f / 32768f;
+
+    private static readonly float[] MuLawTable = BuildTable(MuLawDecoder.MuLawToLinearSample);
+    private static readonly float[] ALawTable = BuildTable(ALawDecoder.ALawToLinearSample);
 
     /// <summary>Loads the WAV file at <paramref name="path"/> as 16 kHz mono samples.</summary>
     /// <remarks>
@@ -23,90 +36,96 @@ public static class AudioPreprocessor
     /// <exception cref="UnsupportedAudioException">The file is not a supported WAV recording.</exception>
     public static async Task<AudioSamples> LoadAsync(string path, CancellationToken cancellationToken)
     {
-        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1 << 16, FileOptions.Asynchronous);
+        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using (file.ConfigureAwait(false))
         {
             // The reader parses the header and leaves the stream at the start of the data chunk.
             using var reader = AudioInspector.OpenReader(file);
             var format = AudioInspector.Describe(reader);
+            var blockAlign = reader.WaveFormat.BlockAlign;
 
-            var data = new byte[Math.Min(reader.Length, file.Length - file.Position)];
-            var filled = await file.ReadAtLeastAsync(data, data.Length, throwOnEndOfStream: false, cancellationToken).ConfigureAwait(false);
-            var completeFrames = filled - (filled % reader.WaveFormat.BlockAlign);
-            if (completeFrames == 0)
+            var available = Math.Min(reader.Length, file.Length - file.Position);
+            var mono = new float[available / blockAlign];
+            var chunk = new byte[ChunkFrames * blockAlign];
+            var frames = 0;
+            while (frames < mono.Length)
+            {
+                var wanted = (int)Math.Min(chunk.Length, (long)(mono.Length - frames) * blockAlign);
+                var read = await file.ReadAtLeastAsync(chunk.AsMemory(0, wanted), wanted, throwOnEndOfStream: false, cancellationToken).ConfigureAwait(false);
+                var chunkFrames = read / blockAlign;
+                DecodeToMono(chunk.AsSpan(0, chunkFrames * blockAlign), format, mono.AsSpan(frames, chunkFrames));
+                frames += chunkFrames;
+                if (read < wanted)
+                {
+                    break;
+                }
+            }
+
+            if (frames == 0)
             {
                 throw new UnsupportedAudioException("The recording is empty.");
             }
 
-            var mono = Downmix(Decode(data.AsSpan(0, completeFrames), format.Encoding), format.Channels);
-            return new AudioSamples(Resample(mono, format.SampleRate), TargetSampleRate);
+            return new AudioSamples(Resample(mono.AsMemory(0, frames), format.SampleRate), TargetSampleRate);
         }
     }
 
-    private static float[] Decode(ReadOnlySpan<byte> data, AudioEncoding encoding)
+    private static void DecodeToMono(ReadOnlySpan<byte> data, AudioFormatInfo format, Span<float> mono)
     {
-        const float Scale = 1f / 32768f;
-        if (encoding == AudioEncoding.Pcm16)
+        var stereo = format.Channels == 2;
+        if (format.Encoding == AudioEncoding.Pcm16)
         {
-            var pcm = MemoryMarshal.Cast<byte, short>(data);
-            var samples = new float[pcm.Length];
-            for (var i = 0; i < pcm.Length; i++)
+            for (var i = 0; i < mono.Length; i++)
             {
-                samples[i] = pcm[i] * Scale;
+                var offset = i * format.Channels * 2;
+                var sample = BinaryPrimitives.ReadInt16LittleEndian(data[offset..]) * Pcm16Scale;
+                mono[i] = stereo ? (sample + (BinaryPrimitives.ReadInt16LittleEndian(data[(offset + 2)..]) * Pcm16Scale)) / 2f : sample;
             }
 
-            return samples;
+            return;
         }
 
-        Func<byte, short> decode = encoding == AudioEncoding.MuLaw
-            ? MuLawDecoder.MuLawToLinearSample
-            : ALawDecoder.ALawToLinearSample;
-        var decoded = new float[data.Length];
-        for (var i = 0; i < data.Length; i++)
-        {
-            decoded[i] = decode(data[i]) * Scale;
-        }
-
-        return decoded;
-    }
-
-    private static float[] Downmix(float[] interleaved, int channels)
-    {
-        if (channels == 1)
-        {
-            return interleaved;
-        }
-
-        var mono = new float[interleaved.Length / 2];
+        var table = format.Encoding == AudioEncoding.MuLaw ? MuLawTable : ALawTable;
         for (var i = 0; i < mono.Length; i++)
         {
-            mono[i] = (interleaved[2 * i] + interleaved[(2 * i) + 1]) / 2f;
+            mono[i] = stereo ? (table[data[2 * i]] + table[data[(2 * i) + 1]]) / 2f : table[data[i]];
         }
-
-        return mono;
     }
 
-    private static float[] Resample(float[] mono, int sampleRate)
+    private static float[] Resample(ReadOnlyMemory<float> mono, int sampleRate)
     {
         if (sampleRate == TargetSampleRate)
         {
-            return mono;
+            return MemoryMarshal.TryGetArray(mono, out var segment) && segment.Count == segment.Array!.Length
+                ? segment.Array
+                : mono.ToArray();
         }
 
-        var source = new ArraySampleProvider(mono, sampleRate);
-        var resampler = new WdlResamplingSampleProvider(source, TargetSampleRate);
-        var output = new float[(int)Math.Ceiling((double)mono.Length * TargetSampleRate / sampleRate) + 4096];
+        var resampler = new WdlResamplingSampleProvider(new MemorySampleProvider(mono, sampleRate), TargetSampleRate);
+        var output = new float[(int)Math.Ceiling((double)mono.Length * TargetSampleRate / sampleRate)];
         var written = 0;
         int read;
-        while ((read = resampler.Read(output.AsSpan(written, Math.Min(4096, output.Length - written)))) > 0)
+        while (written < output.Length && (read = resampler.Read(output.AsSpan(written))) > 0)
         {
             written += read;
         }
 
-        return output[..written];
+        // The windowed-sinc filter can hold back a few samples at the very end; trim if it did.
+        return written == output.Length ? output : output[..written];
     }
 
-    private sealed class ArraySampleProvider(float[] samples, int sampleRate) : ISampleProvider
+    private static float[] BuildTable(Func<byte, short> decode)
+    {
+        var table = new float[256];
+        for (var value = 0; value < table.Length; value++)
+        {
+            table[value] = decode((byte)value) * Pcm16Scale;
+        }
+
+        return table;
+    }
+
+    private sealed class MemorySampleProvider(ReadOnlyMemory<float> samples, int sampleRate) : ISampleProvider
     {
         private int _position;
 
@@ -114,10 +133,10 @@ public static class AudioPreprocessor
 
         public int Read(Span<float> buffer)
         {
-            var available = Math.Min(buffer.Length, samples.Length - _position);
-            samples.AsSpan(_position, available).CopyTo(buffer);
-            _position += available;
-            return available;
+            var count = Math.Min(buffer.Length, samples.Length - _position);
+            samples.Span.Slice(_position, count).CopyTo(buffer);
+            _position += count;
+            return count;
         }
     }
 }

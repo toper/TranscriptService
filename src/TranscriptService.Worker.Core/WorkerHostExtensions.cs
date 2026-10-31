@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Options;
 using TranscriptService.ServiceDefaults;
 using TranscriptService.Worker.Core.Health;
 using TranscriptService.Worker.Core.Messaging;
@@ -27,11 +26,6 @@ public static class WorkerHostExtensions
             .Bind(builder.Configuration.GetSection(EngineOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
-        if (typeof(TEngineOptions) != typeof(EngineOptions))
-        {
-            services.AddSingleton<IOptions<EngineOptions>>(sp => sp.GetRequiredService<IOptions<TEngineOptions>>());
-        }
-
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ITranscriber, TTranscriber>();
         services.AddSingleton<ModelReadiness>();
@@ -45,7 +39,4 @@ public static class WorkerHostExtensions
         services.AddHealthChecks().AddCheck<ModelReadyHealthCheck>("model", tags: [ServiceDefaultsExtensions.ReadyTag]);
         return builder;
     }
-
-    /// <summary>Maps the worker's only HTTP surface: health endpoints for orchestration.</summary>
-    public static WebApplication MapWorkerEndpoints(this WebApplication app) => app.MapDefaultEndpoints();
 }

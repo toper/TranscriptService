@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
-using NAudio.Wave;
 using TranscriptService.Audio;
+using TranscriptService.Audio.Tests;
 using TranscriptService.Contracts;
 using TranscriptService.Contracts.Messages;
 using TranscriptService.Worker.Core.Messaging;
@@ -14,7 +14,7 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
     private readonly FakeTranscriber _transcriber;
     private readonly RecordingPublisher _publisher = new();
     private readonly TranscriptionJobHandler _handler;
-    private readonly string _oneSecondAt8kHz = WriteWav(TimeSpan.FromSeconds(1));
+    private readonly string _oneSecondAt8kHz = WavFixtures.WriteTemp(WavFixtures.Pcm16(new float[8000], 8000));
 
     public TranscriptionJobHandlerTests()
     {
@@ -58,12 +58,12 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
     [Fact]
     public async Task Handle_UnsupportedAudio_PublishesFailedWithReason()
     {
-        var path = WriteBytes("not a wav file"u8.ToArray());
+        var path = WavFixtures.WriteTemp("not a wav file"u8.ToArray());
 
         await _handler.HandleAsync(Command(path), TestContext.Current.CancellationToken);
 
         _publisher.Failed.Should().ContainSingle().Which.Reason.Should().Contain("not a valid WAV");
-        _transcriber.Calls.Should().Be(0);
+        _publisher.Completed.Should().BeEmpty();
     }
 
     [Fact]
@@ -134,23 +134,6 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
 
     private static TranscribeAudio Command(string path) => new(Guid.NewGuid(), path, "pl", TimeSpan.FromSeconds(1));
 
-    private static string WriteWav(TimeSpan duration)
-    {
-        using var output = new MemoryStream();
-        using var writer = new WaveFileWriter(output, new WaveFormat(8000, 16, 1));
-        var silence = new byte[(int)(8000 * 2 * duration.TotalSeconds)];
-        writer.Write(silence, 0, silence.Length);
-        writer.Flush();
-        return WriteBytes(output.ToArray());
-    }
-
-    private static string WriteBytes(byte[] bytes)
-    {
-        var path = Path.Combine(Path.GetTempPath(), $"worker-test-{Guid.NewGuid():N}.wav");
-        File.WriteAllBytes(path, bytes);
-        return path;
-    }
-
     private sealed class FakeTranscriber(FakeTimeProvider time) : ITranscriber
     {
         public const string Name = "fake";
@@ -160,8 +143,6 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
         public TimeSpan Takes { get; set; }
 
         public Exception? Throw { get; set; }
-
-        public int Calls { get; private set; }
 
         public int ReceivedSampleRate { get; private set; }
 
@@ -173,7 +154,6 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
 
         public Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
         {
-            Calls++;
             ReceivedSampleRate = audio.SampleRate;
             ReceivedLanguage = language;
             time.Advance(Takes);
@@ -191,20 +171,21 @@ public sealed class TranscriptionJobHandlerTests : IDisposable
 
         public Exception? FailCompleted { get; set; }
 
-        public Task PublishAsync(TranscriptionCompleted message, CancellationToken cancellationToken)
+        public Task PublishAsync<TMessage>(TMessage message, CancellationToken cancellationToken)
+            where TMessage : class
         {
-            if (FailCompleted is not null)
+            switch (message)
             {
-                return Task.FromException(FailCompleted);
+                case TranscriptionCompleted when FailCompleted is not null:
+                    return Task.FromException(FailCompleted);
+                case TranscriptionCompleted completed:
+                    Completed.Add(completed);
+                    break;
+                case TranscriptionFailed failed:
+                    Failed.Add(failed);
+                    break;
             }
 
-            Completed.Add(message);
-            return Task.CompletedTask;
-        }
-
-        public Task PublishAsync(TranscriptionFailed message, CancellationToken cancellationToken)
-        {
-            Failed.Add(message);
             return Task.CompletedTask;
         }
     }

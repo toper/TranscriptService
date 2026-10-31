@@ -3,11 +3,9 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using TranscriptService.Audio;
+using TranscriptService.ServiceDefaults;
 using TranscriptService.Worker.Core.Health;
 using TranscriptService.Worker.Core.Messaging;
 
@@ -39,7 +37,7 @@ public sealed class WorkerHostTests
     }
 
     [Fact]
-    public async Task Live_WhileModelLoading_RespondsOk_ReadyDoesNot()
+    public async Task Health_WhileModelLoading_LiveOnly_ThenReady()
     {
         await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin" });
         await app.StartAsync(TestContext.Current.CancellationToken);
@@ -50,27 +48,13 @@ public sealed class WorkerHostTests
 
         live.StatusCode.Should().Be(HttpStatusCode.OK);
         ready.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+
+        ((SlowTranscriber)app.Services.GetRequiredService<ITranscriber>()).FinishLoading();
+        await app.Services.GetRequiredService<ModelReadiness>().WaitAsync(TestContext.Current.CancellationToken).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+        var readyAfterLoad = await client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);
+
+        readyAfterLoad.StatusCode.Should().Be(HttpStatusCode.OK);
         await app.StopAsync(TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task Readiness_FlipsOnlyAfterModelLoaded()
-    {
-        var readiness = new ModelReadiness();
-        var check = new ModelReadyHealthCheck(readiness);
-        var transcriber = new SlowTranscriber();
-        using var initialization = new ModelInitializationService(
-            transcriber, readiness, new ApplicationLifetimeStub(), NullLogger<ModelInitializationService>.Instance);
-
-        await initialization.StartAsync(TestContext.Current.CancellationToken);
-        (await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken))
-            .Status.Should().Be(HealthStatus.Unhealthy);
-
-        transcriber.FinishLoading();
-        await readiness.WaitAsync(TestContext.Current.CancellationToken).WaitAsync(Timeout, TestContext.Current.CancellationToken);
-
-        (await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken))
-            .Status.Should().Be(HealthStatus.Healthy);
     }
 
     private static WebApplication BuildWorker<TTranscriber>(Dictionary<string, string?> settings)
@@ -87,7 +71,7 @@ public sealed class WorkerHostTests
         builder.Services.Remove(consumer);
 
         var app = builder.Build();
-        app.MapWorkerEndpoints();
+        app.MapDefaultEndpoints();
         return app;
     }
 
@@ -120,16 +104,4 @@ public sealed class WorkerHostTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class ApplicationLifetimeStub : IHostApplicationLifetime
-    {
-        public CancellationToken ApplicationStarted => CancellationToken.None;
-
-        public CancellationToken ApplicationStopping => CancellationToken.None;
-
-        public CancellationToken ApplicationStopped => CancellationToken.None;
-
-        public void StopApplication()
-        {
-        }
-    }
 }

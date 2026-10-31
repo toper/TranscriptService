@@ -39,28 +39,12 @@ public sealed partial class TranscriptionJobHandler(
                 audio.Duration,
                 timeProvider.GetElapsedTime(started));
         }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex) when (ex is UnsupportedAudioException or TranscriptionRejectedException)
-        {
-            LogRejected(command.JobId, ex.Message);
-            await PublishFailureAsync(command, ex.Message, cancellationToken).ConfigureAwait(false);
-            return;
-        }
-        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
-        {
-            LogRejected(command.JobId, ex.Message);
-            await PublishFailureAsync(command, MissingRecordingReason, cancellationToken).ConfigureAwait(false);
-            return;
-        }
 #pragma warning disable CA1031 // Any engine fault must end the job with a failure event rather than poison the queue.
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
 #pragma warning restore CA1031
         {
-            LogEngineFailure(ex, command.JobId);
-            await PublishFailureAsync(command, EngineFailureReason, cancellationToken).ConfigureAwait(false);
+            var failed = new TranscriptionFailed(command.JobId, transcriber.EngineName, ReasonFor(ex, command.JobId));
+            await publisher.PublishAsync(failed, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -68,8 +52,28 @@ public sealed partial class TranscriptionJobHandler(
         await publisher.PublishAsync(completed, cancellationToken).ConfigureAwait(false);
     }
 
-    private Task PublishFailureAsync(TranscribeAudio command, string reason, CancellationToken cancellationToken) =>
-        publisher.PublishAsync(new TranscriptionFailed(command.JobId, transcriber.EngineName, reason), cancellationToken);
+    /// <summary>
+    /// Client-facing reason for a failed job. Rejections explain themselves; anything else is an
+    /// engine fault whose details stay in the logs.
+    /// </summary>
+    private string ReasonFor(Exception exception, Guid jobId)
+    {
+        var rejection = exception switch
+        {
+            UnsupportedAudioException or TranscriptionRejectedException => exception.Message,
+            FileNotFoundException or DirectoryNotFoundException => MissingRecordingReason,
+            _ => null,
+        };
+
+        if (rejection is null)
+        {
+            LogEngineFailure(exception, jobId);
+            return EngineFailureReason;
+        }
+
+        LogRejected(jobId, exception.Message);
+        return rejection;
+    }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Transcribed job {JobId}: {AudioDuration} of audio in {ProcessingTime}")]
     private partial void LogCompleted(Guid jobId, TimeSpan audioDuration, TimeSpan processingTime);
