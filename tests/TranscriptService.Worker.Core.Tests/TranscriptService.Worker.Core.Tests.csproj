@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\TranscriptService.Audio.Tests\WavFixtures.cs" Link="WavFixtures.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
+  </ItemGroup>
+
+</Project>

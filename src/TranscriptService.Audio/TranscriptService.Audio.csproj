@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Inspection of telephone-grade WAV recordings and conversion to 16 kHz mono samples for speech engines.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NAudio.Core" />
+  </ItemGroup>
+
+</Project>
