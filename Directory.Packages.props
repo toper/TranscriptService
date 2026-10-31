@@ -1,0 +1,11 @@
+<Project>
+  <!-- Versions are added in the change that first references a package. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup Label="Testing">
+    <PackageVersion Include="xunit.v3.mtp-v2" Version="4.0.2" />
+    <PackageVersion Include="AwesomeAssertions" Version="9.6.0" />
+  </ItemGroup>
+</Project>

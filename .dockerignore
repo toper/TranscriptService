@@ -1,0 +1,15 @@
+# Images build single projects (dotnet restore <project>.csproj), never the .slnx,
+# so test projects and docs are deliberately left out of the build context.
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+.git/
+.github/
+.superpowers/
+.claude/
+models/
+data/
+docs/
+tests/
+deploy/
