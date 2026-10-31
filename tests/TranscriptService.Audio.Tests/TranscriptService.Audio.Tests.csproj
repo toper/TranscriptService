@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\TranscriptService.Audio\TranscriptService.Audio.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\TestData\sample.wav" Link="TestData\sample.wav" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
