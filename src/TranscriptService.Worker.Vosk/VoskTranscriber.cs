@@ -60,10 +60,6 @@ public sealed partial class VoskTranscriber(
         ArgumentNullException.ThrowIfNull(audio);
         using var running = _inFlight.Enter(); // before reading the model, so disposal cannot free it underneath
         var model = _model ?? throw new InvalidOperationException("The model is not loaded.");
-        if (!SupportedLanguages.Contains(language))
-        {
-            throw new TranscriptionRejectedException($"The deployed Vosk model recognizes '{options.Value.ModelLanguage}' only; requested '{language}'.");
-        }
 
         // Vosk decodes synchronously; run it off the caller's thread so cancellation and shutdown stay responsive.
         var words = await Task.Run(() => Recognize(model, audio, cancellationToken), cancellationToken).ConfigureAwait(false);

@@ -11,7 +11,10 @@ public interface ITranscriber : IAsyncDisposable
     /// <summary>Short engine identifier reported with results, e.g. <c>whispernet</c>.</summary>
     string EngineName { get; }
 
-    /// <summary>Language codes the loaded model recognizes; other requests are rejected before transcription.</summary>
+    /// <summary>
+    /// Language codes the loaded model recognizes. <see cref="TranscriptionJobHandler"/> rejects other
+    /// languages before calling <see cref="TranscribeAsync"/>, so engines need not check again.
+    /// </summary>
     IReadOnlySet<string> SupportedLanguages { get; }
 
     /// <summary>Loads the model. Throws when the configuration cannot work, so the host fails to start.</summary>
