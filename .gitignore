@@ -482,10 +482,13 @@ $RECYCLE.BIN/
 *.swp
 
 # Local runtime data
-models/
-data/
+/models/
+/data/
 *.db
 *.db-shm
 *.db-wal
 .superpowers/
 .claude/settings.local.json
+
+# Local assistant notes (kept private, as before the rewrite)
+CLAUDE.md

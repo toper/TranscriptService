@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:
@@ -26,4 +29,11 @@ jobs:
         run: dotnet build TranscriptService.slnx -c Release --no-restore
 
       - name: Test
-        run: dotnet test TranscriptService.slnx -c Release --no-build
+        run: dotnet test --solution TranscriptService.slnx -c Release --no-build --report-xunit-trx --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/TestResults/*.trx'
