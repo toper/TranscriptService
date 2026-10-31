@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using TranscriptService.ServiceDefaults;
 using TranscriptService.Worker.Core.Health;
 using TranscriptService.Worker.Core.Messaging;
@@ -26,6 +27,13 @@ public static class WorkerHostExtensions
             .Bind(builder.Configuration.GetSection(EngineOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+
+        // Shared services read the common settings (e.g. the device) without knowing the engine's options type.
+        // Only for a derived type: aliasing IOptions<EngineOptions> to itself would make the container deadlock.
+        if (typeof(TEngineOptions) != typeof(EngineOptions))
+        {
+            services.AddSingleton<IOptions<EngineOptions>>(provider => provider.GetRequiredService<IOptions<TEngineOptions>>());
+        }
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ITranscriber, TTranscriber>();
         services.AddSingleton<ModelReadiness>();

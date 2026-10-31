@@ -73,7 +73,7 @@ services:
     build:
       <<: *worker-build
       args:
-        WORKER: WhisperNet
+        WORKER: whispernet
     environment:
       ConnectionStrings__RabbitMq: host=rabbitmq
       Engine__ModelPath: /models/${WHISPERNET_MODEL:-whispernet/ggml-large-v3-turbo-q5_0.bin}
@@ -81,6 +81,29 @@ services:
       rabbitmq:
         condition: service_healthy
       models-init-whispernet:
+        condition: service_completed_successfully
+
+  # ---- FasterWhisper.NET (CTranslate2) — meant for GPU: on CPU a short call takes tens of seconds.
+  models-init-fasterwhisper:
+    <<: *models-init
+    profiles: [fasterwhisper]
+    command: ["sh", "/scripts/fetch-models.sh", "fasterwhisper", "/models"]
+
+  worker-fasterwhisper:
+    <<: *worker
+    profiles: [fasterwhisper]
+    image: transcriptservice-fasterwhisper:cpu
+    build:
+      <<: *worker-build
+      args:
+        WORKER: fasterwhisper
+    environment:
+      ConnectionStrings__RabbitMq: host=rabbitmq
+      Engine__ModelPath: /models/${FASTERWHISPER_MODEL:-fasterwhisper/large-v3-turbo}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      models-init-fasterwhisper:
         condition: service_completed_successfully
 
 volumes:

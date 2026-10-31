@@ -44,6 +44,35 @@ public sealed class WorkerHostTests
     }
 
     [Fact]
+    public async Task Initialization_OnCuda_WarmsUpTheEngine_BeforeReportingReady()
+    {
+        await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin", ["Engine:Device"] = "Cuda" });
+        var transcriber = (SlowTranscriber)app.Services.GetRequiredService<ITranscriber>();
+        transcriber.FinishLoading();
+
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        await app.Services.GetRequiredService<ModelReadiness>().WaitAsync(TestContext.Current.CancellationToken).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+
+        transcriber.Transcribed.Should().ContainSingle("one warm-up run absorbs one-time GPU initialisation")
+            .Which.Language.Should().Be("pl");
+        await app.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task Initialization_OnCpu_SkipsWarmUp()
+    {
+        await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin", ["Engine:Device"] = "Cpu" });
+        var transcriber = (SlowTranscriber)app.Services.GetRequiredService<ITranscriber>();
+        transcriber.FinishLoading();
+
+        await app.StartAsync(TestContext.Current.CancellationToken);
+        await app.Services.GetRequiredService<ModelReadiness>().WaitAsync(TestContext.Current.CancellationToken).WaitAsync(Timeout, TestContext.Current.CancellationToken);
+
+        transcriber.Transcribed.Should().BeEmpty("on CPU there is no one-time GPU initialisation to absorb");
+        await app.StopAsync(TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
     public async Task Health_WhileModelLoading_LiveOnly_ThenReady()
     {
         await using var app = BuildWorker<SlowTranscriber>(new() { ["Engine:ModelPath"] = "/models/model.bin" });
@@ -88,14 +117,19 @@ public sealed class WorkerHostTests
 
         public string EngineName => "slow";
 
-        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "pl" };
+        public IReadOnlySet<string> SupportedLanguages { get; } = new HashSet<string> { "af", "en", "pl" };
 
         public void FinishLoading() => _loaded.TrySetResult();
 
         public Task InitializeAsync(CancellationToken cancellationToken) => _loaded.Task.WaitAsync(cancellationToken);
 
-        public Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken) =>
-            Task.FromResult(new TranscriptionOutput(string.Empty, []));
+        public List<(TimeSpan Duration, string Language)> Transcribed { get; } = [];
+
+        public Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
+        {
+            Transcribed.Add((audio.Duration, language));
+            return Task.FromResult(new TranscriptionOutput(string.Empty, []));
+        }
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

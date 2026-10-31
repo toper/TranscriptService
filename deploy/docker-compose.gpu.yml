@@ -16,3 +16,9 @@ services:
     image: transcriptservice-whispernet:cuda
     build:
       target: runtime-cuda
+
+  worker-fasterwhisper:
+    <<: *gpu
+    image: transcriptservice-fasterwhisper:cuda
+    build:
+      target: runtime-cuda

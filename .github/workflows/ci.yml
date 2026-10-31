@@ -51,11 +51,19 @@ jobs:
           - name: whispernet-cpu
             dockerfile: deploy/worker.Dockerfile
             target: runtime-cpu
-            worker: WhisperNet
+            worker: whispernet
           - name: whispernet-cuda
             dockerfile: deploy/worker.Dockerfile
             target: runtime-cuda
-            worker: WhisperNet
+            worker: whispernet
+          - name: fasterwhisper-cpu
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cpu
+            worker: fasterwhisper
+          - name: fasterwhisper-cuda
+            dockerfile: deploy/worker.Dockerfile
+            target: runtime-cuda
+            worker: fasterwhisper
     name: docker (${{ matrix.name }})
     steps:
       - uses: actions/checkout@v4

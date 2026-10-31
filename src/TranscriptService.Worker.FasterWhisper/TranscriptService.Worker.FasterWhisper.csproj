@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>Engine worker running FasterWhisper.NET (CTranslate2 models) on CPU or CUDA.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- The CUDA image is published with -p:UseCuda=true, which swaps in the GPU build of CTranslate2. -->
+    <UseCuda Condition="'$(UseCuda)' == ''">false</UseCuda>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FasterWhisper.NET" Condition="'$(UseCuda)' != 'true'" />
+    <PackageReference Include="FasterWhisper.NET.Gpu" Condition="'$(UseCuda)' == 'true'" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TranscriptService.Engines.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
+  </ItemGroup>
+
+</Project>
