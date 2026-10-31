@@ -1,0 +1,15 @@
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+.git/
+.github/
+.superpowers/
+.claude/
+models/
+data/
+docs/
+tests/
+deploy/
+**/*.md
+!README.md
