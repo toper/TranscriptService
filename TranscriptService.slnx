@@ -10,6 +10,7 @@
     <Project Path="tests/TranscriptService.Api.Tests/TranscriptService.Api.Tests.csproj" />
     <Project Path="tests/TranscriptService.Audio.Tests/TranscriptService.Audio.Tests.csproj" />
     <Project Path="tests/TranscriptService.Contracts.Tests/TranscriptService.Contracts.Tests.csproj" />
+    <Project Path="tests/TranscriptService.IntegrationTests/TranscriptService.IntegrationTests.csproj" />
     <Project Path="tests/TranscriptService.Worker.Core.Tests/TranscriptService.Worker.Core.Tests.csproj" />
   </Folder>
 </Solution>

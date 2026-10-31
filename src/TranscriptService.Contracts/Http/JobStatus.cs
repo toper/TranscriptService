@@ -1,6 +1,9 @@
+using System.Text.Json.Serialization;
+
 namespace TranscriptService.Contracts.Http;
 
-/// <summary>Lifecycle of a transcription job.</summary>
+/// <summary>Lifecycle of a transcription job. Serialized by name, so clients see readable values.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<JobStatus>))]
 public enum JobStatus
 {
     /// <summary>Accepted and waiting for, or being processed by, an engine worker.</summary>

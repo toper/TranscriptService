@@ -31,6 +31,7 @@ public sealed class CallbackDispatcherTests : IDisposable
 
         await WaitUntilAsync(_factory, async db => !await db.Jobs.AnyAsync(j => j.Id == job.Id));
 
+        await WaitUntilLoggedAsync(1);
         var request = _client.LogEntries.Should().ContainSingle().Subject.RequestMessage!;
         request.Headers![CallbackSigner.JobIdHeader].Should().ContainSingle().Which.Should().Be(job.Id.ToString());
         var signature = request.Headers[CallbackSigner.SignatureHeader].Should().ContainSingle().Subject;
@@ -49,6 +50,7 @@ public sealed class CallbackDispatcherTests : IDisposable
 
         await WaitUntilAsync(_factory, async db => !await db.Jobs.AnyAsync(j => j.Id == job.Id));
 
+        await WaitUntilLoggedAsync(2);
         _client.LogEntries.Should().HaveCount(2);
     }
 
@@ -60,6 +62,8 @@ public sealed class CallbackDispatcherTests : IDisposable
 
         await WaitUntilAsync(_factory, async db => (await db.Jobs.SingleAsync(j => j.Id == job.Id)).Status == JobStatus.CallbackFailed);
 
+        // WireMock records a request after answering it, so the log can trail the database update.
+        await WaitUntilLoggedAsync(3);
         _client.LogEntries.Should().HaveCount(3, "one attempt plus two retries");
     }
 
@@ -83,6 +87,7 @@ public sealed class CallbackDispatcherTests : IDisposable
             restarted.CreateClient().Dispose();
 
             await WaitUntilAsync(restarted, async db => !await db.Jobs.AnyAsync());
+            await WaitUntilLoggedAsync(1);
             _client.LogEntries.Should().ContainSingle();
         }
         finally
@@ -126,6 +131,16 @@ public sealed class CallbackDispatcherTests : IDisposable
         }
 
         return job;
+    }
+
+    private async Task WaitUntilLoggedAsync(int requests)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(Timeout);
+        while (_client.LogEntries.Count < requests)
+        {
+            await Task.Delay(20, timeout.Token);
+        }
     }
 
     private static ValueTask DispatchAsync(ApiTestFactory factory, Guid jobId) =>

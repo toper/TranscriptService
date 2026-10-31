@@ -12,7 +12,7 @@ namespace TranscriptService.Api.Tests.Endpoints;
 public sealed class TranscriptionEndpointsTests : IDisposable
 {
     private static readonly Uri Transcriptions = new("/api/v1/transcriptions", UriKind.Relative);
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly ApiTestFactory _factory = new();
 
