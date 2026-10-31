@@ -54,6 +54,9 @@ builder.Services.AddSingleton<ITranscriptionRequestPublisher, EasyNetQRequestPub
 builder.Services.AddScoped<TranscriptionResultHandler>();
 builder.Services.AddHostedService<TranscriptionResultSubscriber>();
 builder.Services.AddSingleton<PendingCallbacks>();
+builder.Services.AddHostedService<CallbackDispatcher>();
+builder.Services.AddHttpClient(CallbackDispatcher.HttpClientName)
+    .AddStandardResilienceHandler(builder.Configuration.GetSection("CallbackDelivery"));
 
 var app = builder.Build();
 
