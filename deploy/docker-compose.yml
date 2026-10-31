@@ -106,6 +106,30 @@ services:
       models-init-fasterwhisper:
         condition: service_completed_successfully
 
+  # ---- Vosk (Kaldi) — CPU only, word-level timestamps, small Polish model.
+  models-init-vosk:
+    <<: *models-init
+    profiles: [vosk]
+    command: ["sh", "/scripts/fetch-models.sh", "vosk", "/models"]
+
+  worker-vosk:
+    <<: *worker
+    profiles: [vosk]
+    image: transcriptservice-vosk:cpu
+    build:
+      <<: *worker-build
+      args:
+        WORKER: vosk
+    environment:
+      ConnectionStrings__RabbitMq: host=rabbitmq
+      Engine__ModelPath: /models/${VOSK_MODEL:-vosk/small-pl}
+      Engine__ModelLanguage: ${VOSK_MODEL_LANGUAGE:-pl}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      models-init-vosk:
+        condition: service_completed_successfully
+
 volumes:
   data:       # recordings and the job database, owned by the API
   models:     # speech models, fetched by models-init-* and mounted read-only by workers

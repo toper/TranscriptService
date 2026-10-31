@@ -49,6 +49,9 @@ RUN apt-get update && apt-get install --yes --no-install-recommends libgomp1 lib
 FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04 AS cuda-base-fasterwhisper
 RUN apt-get update && apt-get install --yes --no-install-recommends libgomp1 libcudnn8 && rm -rf /var/lib/apt/lists/*
 
+# Vosk (Kaldi): CPU only, needs nothing beyond the C++ runtime already in the image.
+FROM dotnet AS cpu-base-vosk
+
 # ---- CPU image. Workers run as the non-root "app" user (uid 1654) on port 8080.
 FROM cpu-base-${WORKER} AS runtime-cpu
 WORKDIR /app

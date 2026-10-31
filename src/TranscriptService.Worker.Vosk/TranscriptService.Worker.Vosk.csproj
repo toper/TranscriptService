@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Description>Engine worker running Vosk (Kaldi) offline recognition on CPU, with word-level timestamps.</Description>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vosk" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TranscriptService.Worker.Core\TranscriptService.Worker.Core.csproj" />
+  </ItemGroup>
+
+</Project>

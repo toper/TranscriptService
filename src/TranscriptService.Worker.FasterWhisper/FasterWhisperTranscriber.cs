@@ -48,10 +48,10 @@ public sealed partial class FasterWhisperTranscriber(
     public async Task<TranscriptionOutput> TranscribeAsync(AudioSamples audio, string language, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(audio);
+        using var running = _inFlight.Enter(); // before reading the model, so disposal cannot free it underneath
         var model = _model ?? throw new InvalidOperationException("The model is not loaded.");
         var settings = options.Value;
 
-        using var running = _inFlight.Enter();
         var segments = new List<TranscriptSegment>();
         var recognized = model.TranscribeAsync(
             audio.Samples,

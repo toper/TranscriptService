@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TranscriptService.Worker.WhisperNet\TranscriptService.Worker.WhisperNet.csproj" />
     <ProjectReference Include="..\..\src\TranscriptService.Worker.FasterWhisper\TranscriptService.Worker.FasterWhisper.csproj" />
+    <ProjectReference Include="..\..\src\TranscriptService.Worker.Vosk\TranscriptService.Worker.Vosk.csproj" />
   </ItemGroup>
 
 </Project>
