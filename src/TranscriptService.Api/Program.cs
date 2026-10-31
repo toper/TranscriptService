@@ -9,6 +9,7 @@ using TranscriptService.Api.Jobs;
 using TranscriptService.Api.Messaging;
 using TranscriptService.Api.OpenApi;
 using TranscriptService.Api.Options;
+using TranscriptService.Api.Retention;
 using TranscriptService.Api.Security;
 using TranscriptService.ServiceDefaults;
 
@@ -55,6 +56,8 @@ builder.Services.AddScoped<TranscriptionResultHandler>();
 builder.Services.AddHostedService<TranscriptionResultSubscriber>();
 builder.Services.AddSingleton<PendingCallbacks>();
 builder.Services.AddHostedService<CallbackDispatcher>();
+builder.Services.AddScoped<RetentionCleaner>();
+builder.Services.AddHostedService<RetentionCleanupService>();
 builder.Services.AddHttpClient(CallbackDispatcher.HttpClientName)
     .AddStandardResilienceHandler(builder.Configuration.GetSection("CallbackDelivery"));
 
