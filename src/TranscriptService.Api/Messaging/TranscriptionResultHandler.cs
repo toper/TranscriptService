@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using TranscriptService.Api.Callbacks;
 using TranscriptService.Api.Jobs;
 using TranscriptService.Contracts.Http;
@@ -27,17 +28,14 @@ public sealed partial class TranscriptionResultHandler(
             job.Segments = message.Segments;
             job.AudioDuration = message.AudioDuration;
             job.ProcessingTime = message.ProcessingTime;
+            job.FinishedAt = time.GetUtcNow();
         }, cancellationToken);
     }
 
     public Task HandleAsync(TranscriptionFailed message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
-        return FinishAsync(message.JobId, message.Engine, job =>
-        {
-            job.Status = JobStatus.Failed;
-            job.FailureReason = message.Reason;
-        }, cancellationToken);
+        return FinishAsync(message.JobId, message.Engine, job => job.Fail(message.Reason, time.GetUtcNow()), cancellationToken);
     }
 
     private async Task FinishAsync(Guid jobId, string engine, Action<TranscriptionJob> apply, CancellationToken cancellationToken)
@@ -51,8 +49,17 @@ public sealed partial class TranscriptionResultHandler(
 
         apply(job);
         job.Engine = engine;
-        job.FinishedAt = time.GetUtcNow();
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Deleted by the client while the worker was transcribing.
+            LogIgnored(jobId, status: null);
+            return;
+        }
+
         storage.Delete(job.AudioPath);
 
         if (job.CallbackUrl is not null)

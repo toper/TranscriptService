@@ -10,6 +10,10 @@ internal sealed class DatabaseMigrationService(IServiceScopeFactory scopes) : IH
         await using var scope = scopes.CreateAsyncScope();
         var context = scope.ServiceProvider.GetRequiredService<TranscriptionDbContext>();
         await context.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
+
+        // Write-ahead logging lets readers (status polls) proceed while the dispatcher,
+        // result handler and retention write. The mode is stored in the database file.
+        await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;", cancellationToken).ConfigureAwait(false);
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

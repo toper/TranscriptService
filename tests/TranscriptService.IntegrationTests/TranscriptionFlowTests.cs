@@ -45,6 +45,7 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
             builder.UseSetting("Api:ApiKey", ApiKey);
             builder.UseSetting("Api:CallbackSigningSecret", SigningSecret);
             builder.UseSetting("Api:StoragePath", Path.Combine(_root, "audio"));
+            builder.UseSetting("Api:AllowPrivateCallbackAddresses", "true");
         });
         _api.CreateClient().Dispose();
 
@@ -57,11 +58,10 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
         });
         worker.AddTranscriptionWorker<FakeTranscriber, EngineOptions>();
         _worker = worker.Build();
-        await _worker.StartAsync(TestContext.Current.CancellationToken);
     }
 
     [Fact]
-    public async Task Post_ThenWorkerCompletes_SignedCallbackReceived_AndJobDeleted()
+    public async Task Post_BeforeWorkerStarts_WorkerCompletes_SignedCallbackReceived_AndJobDeleted()
     {
         _callbackReceiver.Given(Request.Create().WithPath("/hook").UsingPost()).RespondWith(Response.Create().WithStatusCode(200));
         using var client = _api.CreateClient();
@@ -77,6 +77,9 @@ public sealed class TranscriptionFlowTests : IAsyncLifetime
         var accepted = await client.PostAsync(new Uri("/api/v1/transcriptions", UriKind.Relative), form, TestContext.Current.CancellationToken);
         accepted.StatusCode.Should().Be(HttpStatusCode.Accepted);
         var job = await accepted.Content.ReadFromJsonAsync<TranscriptionResponse>(TestContext.Current.CancellationToken);
+
+        // A worker still loading its model must find the request waiting, not lost.
+        await _worker.StartAsync(TestContext.Current.CancellationToken);
 
         var callback = await WaitForCallbackAsync();
         CallbackSigner.Verify(callback.BodyAsBytes, callback.Headers![CallbackSigner.SignatureHeader].Single(), SigningSecret).Should().BeTrue();

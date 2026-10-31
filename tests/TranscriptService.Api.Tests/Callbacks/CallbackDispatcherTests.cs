@@ -57,6 +57,18 @@ public sealed class CallbackDispatcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispatch_PrivateAddressNotAllowed_IsRefusedWithoutRequest()
+    {
+        RespondWith(200);
+        _factory.Settings["Api:AllowPrivateCallbackAddresses"] = "false";
+        var job = await AddFinishedJobAsync(_factory);
+
+        await WaitUntilAsync(_factory, async db => (await db.Jobs.SingleAsync(j => j.Id == job.Id)).Status == JobStatus.CallbackFailed);
+
+        _client.LogEntries.Should().BeEmpty("loopback and private networks are off limits by default");
+    }
+
+    [Fact]
     public async Task Dispatch_TransientFailureThenSuccess_Delivers()
     {
         _client.Given(Request.Create().WithPath("/hook").UsingPost()).InScenario("flaky").WillSetStateTo("recovered")

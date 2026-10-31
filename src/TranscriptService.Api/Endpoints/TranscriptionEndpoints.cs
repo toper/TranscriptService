@@ -114,37 +114,48 @@ internal static partial class TranscriptionEndpoints
         }
 
         var jobId = Guid.CreateVersion7();
-        string path;
-        using (var stream = audio.OpenReadStream())
-        {
-            path = await storage.SaveAsync(jobId, stream, cancellationToken).ConfigureAwait(false);
-        }
-
         var job = new TranscriptionJob
         {
             Id = jobId,
             Status = JobStatus.Queued,
             Language = language,
-            AudioPath = path,
+            AudioPath = storage.PathFor(jobId),
             AudioDuration = format.Duration,
             CallbackUrl = callback,
             CreatedAt = time.GetUtcNow(),
         };
-        db.Jobs.Add(job);
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+        // Nothing may outlive a failed or aborted request: no recording without a job, no job without a queued request.
+        try
+        {
+            using var stream = audio.OpenReadStream();
+            await storage.SaveAsync(jobId, stream, cancellationToken).ConfigureAwait(false);
+            db.Jobs.Add(job);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            storage.Delete(job.AudioPath);
+            throw;
+        }
 
         try
         {
-            var command = new TranscribeAudio(jobId, path, language, format.Duration);
+            var command = new TranscribeAudio(jobId, job.AudioPath, language, format.Duration);
             await publisher.PublishAsync(command, MessagePriority.For(format.Duration, settings.HighPriorityThreshold), cancellationToken).ConfigureAwait(false);
         }
 #pragma warning disable CA1031 // Any publishing failure means the job cannot run; undo it and tell the client to retry.
-        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        catch (Exception)
 #pragma warning restore CA1031
         {
             db.Jobs.Remove(job);
             await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
-            storage.Delete(path);
+            storage.Delete(job.AudioPath);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+
             return TypedResults.Problem(
                 "The transcription queue is unavailable. Retry later.",
                 statusCode: StatusCodes.Status503ServiceUnavailable,
@@ -181,6 +192,6 @@ internal static partial class TranscriptionEndpoints
         return TypedResults.NoContent();
     }
 
-    [GeneratedRegex("^[a-z]{2}$")]
+    [GeneratedRegex(@"\A[a-z]{2}\z")]
     private static partial Regex LanguageCode();
 }

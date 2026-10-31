@@ -125,12 +125,14 @@ public sealed class TranscriptionEndpointsTests : IDisposable
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    [Fact]
-    public async Task Post_InvalidLanguage_Returns400()
+    [Theory]
+    [InlineData("polish")]
+    [InlineData("pl\n")]
+    public async Task Post_InvalidLanguage_Returns400(string language)
     {
         using var client = _factory.CreateAuthorizedClient();
 
-        var response = await client.PostAsync(Transcriptions, Form(Wav(TimeSpan.FromSeconds(1)), language: "polish"), TestContext.Current.CancellationToken);
+        var response = await client.PostAsync(Transcriptions, Form(Wav(TimeSpan.FromSeconds(1)), language: language), TestContext.Current.CancellationToken);
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }

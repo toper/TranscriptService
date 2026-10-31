@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Http.Resilience;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 using TranscriptService.Api.Callbacks;
 using TranscriptService.Api.Endpoints;
@@ -62,7 +64,10 @@ builder.Services.AddHostedService<CallbackDispatcher>();
 builder.Services.AddScoped<RetentionCleaner>();
 builder.Services.AddHostedService<RetentionCleanupService>();
 builder.Services.AddHttpClient(CallbackDispatcher.HttpClientName)
-    .AddStandardResilienceHandler(builder.Configuration.GetSection("CallbackDelivery"));
+    .ConfigurePrimaryHttpMessageHandler(services =>
+        CallbackAddressGuard.CreateHandler(services.GetRequiredService<IOptions<ApiOptions>>().Value.AllowPrivateCallbackAddresses))
+    .AddStandardResilienceHandler(builder.Configuration.GetSection("CallbackDelivery"))
+    .SelectPipelineByAuthority(); // one failing receiver must not open the circuit for everyone
 
 var app = builder.Build();
 

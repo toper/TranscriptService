@@ -33,4 +33,10 @@ public sealed class ApiOptions
     public TimeSpan HighPriorityThreshold { get; set; } = TimeSpan.FromSeconds(30);
 
     public TimeSpan CleanupInterval { get; set; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// Allows callbacks to loopback, private and link-local addresses. Off by default to prevent
+    /// SSRF; enable only when the receivers live on the internal network (e.g. the demo).
+    /// </summary>
+    public bool AllowPrivateCallbackAddresses { get; set; }
 }

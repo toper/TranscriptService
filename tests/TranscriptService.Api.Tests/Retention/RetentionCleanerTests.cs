@@ -28,16 +28,42 @@ public sealed class RetentionCleanerTests : IAsyncLifetime
     public async Task Clean_RemovesExpiredFinishedJobs_KeepsFresh()
     {
         var now = _time.GetUtcNow();
-        var expired = await AddAsync(JobStatus.Completed, finishedAt: now - TimeSpan.FromMinutes(16));
-        var expiredUndeliverable = await AddAsync(JobStatus.CallbackFailed, finishedAt: now - TimeSpan.FromMinutes(20));
+        await AddAsync(JobStatus.Completed, finishedAt: now - TimeSpan.FromMinutes(16));
+        await AddAsync(JobStatus.CallbackFailed, finishedAt: now - TimeSpan.FromMinutes(20), callback: true);
         var fresh = await AddAsync(JobStatus.Failed, finishedAt: now - TimeSpan.FromMinutes(5));
 
         var removed = await CleanAsync();
 
         removed.Should().Be(2);
         (await IdsAsync()).Should().Equal(fresh.Id);
-        File.Exists(expired.AudioPath).Should().BeFalse();
-        File.Exists(expiredUndeliverable.AudioPath).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Clean_FinishedJobAwaitingCallback_IsKept()
+    {
+        var awaiting = await AddAsync(JobStatus.Completed, finishedAt: _time.GetUtcNow() - TimeSpan.FromHours(1), callback: true);
+
+        await CleanAsync();
+
+        (await IdsAsync()).Should().Equal(awaiting.Id);
+    }
+
+    [Fact]
+    public async Task Clean_OrphanedRecordingOlderThanTtl_IsDeleted()
+    {
+        var orphan = Path.Combine(_storage, $"{Guid.NewGuid()}.wav");
+        await File.WriteAllBytesAsync(orphan, [0], TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(orphan, (_time.GetUtcNow() - TimeSpan.FromHours(1)).UtcDateTime);
+        var fresh = Path.Combine(_storage, $"{Guid.NewGuid()}.wav");
+        await File.WriteAllBytesAsync(fresh, [0], TestContext.Current.CancellationToken);
+        File.SetLastWriteTimeUtc(fresh, _time.GetUtcNow().UtcDateTime);
+        var queued = await AddAsync(JobStatus.Queued, createdAt: _time.GetUtcNow() - TimeSpan.FromHours(1));
+
+        await CleanAsync();
+
+        File.Exists(orphan).Should().BeFalse();
+        File.Exists(fresh).Should().BeTrue("it may belong to an upload in progress");
+        File.Exists(queued.AudioPath).Should().BeTrue("its job still needs it");
     }
 
     [Fact]
@@ -72,7 +98,7 @@ public sealed class RetentionCleanerTests : IAsyncLifetime
         return await cleaner.CleanAsync(TestContext.Current.CancellationToken);
     }
 
-    private async Task<TranscriptionJob> AddAsync(JobStatus status, DateTimeOffset? finishedAt = null, DateTimeOffset? createdAt = null)
+    private async Task<TranscriptionJob> AddAsync(JobStatus status, DateTimeOffset? finishedAt = null, DateTimeOffset? createdAt = null, bool callback = false)
     {
         var id = Guid.NewGuid();
         var path = Path.Combine(_storage, $"{id}.wav");
@@ -85,6 +111,7 @@ public sealed class RetentionCleanerTests : IAsyncLifetime
             AudioPath = path,
             CreatedAt = createdAt ?? finishedAt ?? _time.GetUtcNow(),
             FinishedAt = finishedAt,
+            CallbackUrl = callback ? new Uri("https://client.example/hook") : null,
         };
         await using var context = Context();
         context.Jobs.Add(job);

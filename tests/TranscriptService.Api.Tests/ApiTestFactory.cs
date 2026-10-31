@@ -38,6 +38,8 @@ public sealed class ApiTestFactory : WebApplicationFactory<Program>
         {
             ["Api:ApiKey"] = ApiKey,
             ["Api:CallbackSigningSecret"] = SigningSecret,
+            // Test callback receivers listen on loopback.
+            ["Api:AllowPrivateCallbackAddresses"] = "true",
             ["Api:StoragePath"] = StoragePath,
             ["ConnectionStrings:Jobs"] = $"Data Source={Path.Combine(_root, "jobs.db")}",
             ["ConnectionStrings:RabbitMq"] = "host=localhost",

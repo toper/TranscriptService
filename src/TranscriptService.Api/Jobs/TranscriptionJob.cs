@@ -31,4 +31,12 @@ public sealed class TranscriptionJob
     public string? FailureReason { get; set; }
 
     public TimeSpan? ProcessingTime { get; set; }
+
+    /// <summary>Ends the job without a transcript; the reason is shown to the client.</summary>
+    public void Fail(string reason, DateTimeOffset at)
+    {
+        Status = JobStatus.Failed;
+        FailureReason = reason;
+        FinishedAt = at;
+    }
 }

@@ -3,13 +3,57 @@ using TranscriptService.Contracts.Messages;
 
 namespace TranscriptService.Api.Messaging;
 
-/// <summary>Sends requests to the shared work queue consumed by whichever engine is deployed.</summary>
-internal sealed class EasyNetQRequestPublisher(IBus bus) : ITranscriptionRequestPublisher
+/// <summary>
+/// Sends requests to the shared work queue consumed by whichever engine is deployed. The queue is
+/// declared here too, with the worker's exact arguments: messages sent to an undeclared queue are
+/// dropped by the broker, which would lose every request made while no worker has started yet.
+/// </summary>
+internal sealed class EasyNetQRequestPublisher(IBus bus) : ITranscriptionRequestPublisher, IDisposable
 {
-    public Task PublishAsync(TranscribeAudio command, byte priority, CancellationToken cancellationToken) =>
-        bus.SendReceive.SendAsync(
+    private readonly SemaphoreSlim _declareLock = new(1, 1);
+    private volatile bool _declared;
+
+    public async Task PublishAsync(TranscribeAudio command, byte priority, CancellationToken cancellationToken)
+    {
+        await EnsureQueueDeclaredAsync(cancellationToken).ConfigureAwait(false);
+        await bus.SendReceive.SendAsync(
             QueueNames.TranscriptionRequests,
             command,
             configure => configure.WithPriority(priority),
-            cancellationToken);
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    public void Dispose() => _declareLock.Dispose();
+
+    private async Task EnsureQueueDeclaredAsync(CancellationToken cancellationToken)
+    {
+        if (_declared)
+        {
+            return;
+        }
+
+        await _declareLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!_declared)
+            {
+                var arguments = new Dictionary<string, object?>().WithMaxPriority(MessagePriority.Max);
+                await bus.Advanced.QueueDeclareAsync(
+                    QueueNames.TranscriptionRequests,
+                    configure =>
+                    {
+                        foreach (var (name, value) in arguments)
+                        {
+                            configure.WithArgument(name, value!);
+                        }
+                    },
+                    cancellationToken).ConfigureAwait(false);
+                _declared = true;
+            }
+        }
+        finally
+        {
+            _declareLock.Release();
+        }
+    }
 }

@@ -4,6 +4,8 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 using TranscriptService.Api.Jobs;
 using TranscriptService.Api.Options;
 using TranscriptService.Contracts.Callbacks;
@@ -102,7 +104,9 @@ internal sealed partial class CallbackDispatcher(
             LogUndeliverable(jobId, job.CallbackUrl);
         }
 
-        await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        // The receiver may already have the result: record that even while shutting down,
+        // or the restart scan would send it a second time.
+        await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
     }
 
     private async Task<bool> PostAsync(TranscriptionJob job, CancellationToken cancellationToken)
@@ -118,7 +122,7 @@ internal sealed partial class CallbackDispatcher(
             using var response = await httpClients.CreateClient(HttpClientName).SendAsync(request, cancellationToken).ConfigureAwait(false);
             return response.IsSuccessStatusCode;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or Polly.Timeout.TimeoutRejectedException
+        catch (Exception ex) when (ex is HttpRequestException or TimeoutException or TimeoutRejectedException or BrokenCircuitException
             || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
         {
             LogDeliveryError(ex, job.Id);
