@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 using TranscriptService.Api.Endpoints;
+using TranscriptService.Api.Jobs;
 using TranscriptService.Api.Messaging;
 using TranscriptService.Api.OpenApi;
 using TranscriptService.Api.Options;
@@ -29,6 +31,14 @@ builder.Services.AddOpenApi("v1", options =>
     });
     options.AddDocumentTransformer<ApiKeySecuritySchemeTransformer>();
 });
+
+builder.Services.AddDbContext<TranscriptionDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("Jobs")
+        ?? throw new InvalidOperationException("Connection string 'Jobs' is not configured.")));
+builder.Services.AddHostedService<DatabaseMigrationService>();
+builder.Services.AddHealthChecks().AddDbContextCheck<TranscriptionDbContext>("database", tags: [ServiceDefaultsExtensions.ReadyTag]);
+builder.Services.AddSingleton<AudioStorage>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddSingleton<ITranscriptionRequestPublisher, EasyNetQRequestPublisher>();
 
